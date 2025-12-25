@@ -1,0 +1,583 @@
+// Copyright 2025 Creto
+// Licensed under the Apache License, Version 2.0
+
+// Oversight Service API Specification
+// Issue #52: Oversight Service Integration
+//
+// This service provides human-in-the-loop oversight, approval workflows,
+// and escalation management for autonomous agent operations.
+
+syntax = "proto3";
+
+package creto.oversight.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/any.proto";
+
+option go_package = "github.com/creto/enablement/gen/go/oversight/v1;oversightv1";
+option java_multiple_files = true;
+option java_package = "io.creto.oversight.v1";
+option java_outer_classname = "OversightProto";
+
+// OversightService manages approval workflows and human oversight
+// for autonomous agent operations requiring human intervention.
+service OversightService {
+  // SubmitRequest creates a new oversight request for approval
+  // Rate limit: 100 requests/second per tenant
+  rpc SubmitRequest(SubmitRequestRequest) returns (SubmitRequestResponse) {}
+
+  // GetRequestStatus retrieves current status of an oversight request
+  rpc GetRequestStatus(GetRequestStatusRequest) returns (RequestStatus) {}
+
+  // ApproveRequest approves a pending oversight request
+  rpc ApproveRequest(ApproveRequestRequest) returns (ApproveResponse) {}
+
+  // RejectRequest rejects a pending oversight request
+  rpc RejectRequest(RejectRequestRequest) returns (RejectResponse) {}
+
+  // StreamRequests provides real-time stream of oversight requests
+  // for supervisors and approval workflows
+  rpc StreamRequests(StreamRequestsRequest) returns (stream OversightRequest) {}
+
+  // ListRequests retrieves paginated list of oversight requests
+  rpc ListRequests(ListRequestsRequest) returns (ListRequestsResponse) {}
+
+  // EscalateRequest escalates a request to higher authority
+  rpc EscalateRequest(EscalateRequestRequest) returns (EscalateResponse) {}
+
+  // BulkApprove approves multiple requests atomically
+  rpc BulkApprove(BulkApproveRequest) returns (BulkApproveResponse) {}
+
+  // BulkReject rejects multiple requests atomically
+  rpc BulkReject(BulkRejectRequest) returns (BulkRejectResponse) {}
+
+  // CreatePolicy creates or updates an oversight policy
+  // Requires admin permissions
+  rpc CreatePolicy(CreatePolicyRequest) returns (Policy) {}
+
+  // GetPolicy retrieves an oversight policy
+  rpc GetPolicy(GetPolicyRequest) returns (Policy) {}
+
+  // ListPolicies retrieves all policies for a tenant
+  rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse) {}
+
+  // GetAuditLog retrieves audit trail for oversight decisions
+  rpc GetAuditLog(GetAuditLogRequest) returns (AuditLog) {}
+}
+
+// SubmitRequestRequest creates a new oversight request
+message SubmitRequestRequest {
+  // Unique request identifier (UUID recommended)
+  string request_id = 1;
+
+  // Agent making the request
+  AgentInfo agent = 2;
+
+  // Tenant identifier
+  string tenant_id = 3;
+
+  // The oversight request details
+  OversightRequest request = 4;
+
+  // Priority level
+  Priority priority = 5;
+
+  // Timeout for approval (request auto-rejects after timeout)
+  google.protobuf.Duration timeout = 6;
+
+  // Tags for categorization
+  repeated string tags = 7;
+
+  // Additional metadata
+  map<string, string> metadata = 8;
+}
+
+// SubmitRequestResponse confirms request submission
+message SubmitRequestResponse {
+  // Server-assigned or confirmed request ID
+  string request_id = 1;
+
+  // Initial request status
+  RequestStatus status = 2;
+
+  // Assigned approvers
+  repeated Approver assigned_approvers = 3;
+
+  // Estimated resolution time
+  google.protobuf.Timestamp estimated_resolution = 4;
+
+  // Applied policy
+  string policy_id = 5;
+}
+
+// GetRequestStatusRequest retrieves request status
+message GetRequestStatusRequest {
+  string request_id = 1;
+  bool include_audit_trail = 2;
+}
+
+// RequestStatus represents current state of a request
+message RequestStatus {
+  string request_id = 1;
+  RequestState state = 2;
+  google.protobuf.Timestamp submitted_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  ApprovalDecision decision = 5;
+  repeated StatusTransition transitions = 6;
+  int32 approvals_required = 7;
+  int32 approvals_received = 8;
+}
+
+// ApproveRequestRequest approves a request
+message ApproveRequestRequest {
+  string request_id = 1;
+  string approver_id = 2;
+  string approver_name = 3;
+  string justification = 4;
+  map<string, string> conditions = 5;
+  google.protobuf.Duration approval_duration = 6;
+}
+
+// ApproveResponse confirms approval
+message ApproveResponse {
+  string request_id = 1;
+  ApprovalDecision decision = 2;
+  RequestState new_state = 3;
+  google.protobuf.Timestamp approved_at = 4;
+  bool requires_additional_approvals = 5;
+}
+
+// RejectRequestRequest rejects a request
+message RejectRequestRequest {
+  string request_id = 1;
+  string rejector_id = 2;
+  string rejector_name = 3;
+  string reason = 4;
+  RejectionCategory category = 5;
+  bool allow_resubmission = 6;
+}
+
+// RejectResponse confirms rejection
+message RejectResponse {
+  string request_id = 1;
+  ApprovalDecision decision = 2;
+  google.protobuf.Timestamp rejected_at = 3;
+  bool can_resubmit = 4;
+}
+
+// StreamRequestsRequest initiates request streaming
+message StreamRequestsRequest {
+  string tenant_id = 1;
+  string approver_id = 2;
+  repeated RequestState states = 3;
+  repeated Priority priorities = 4;
+  repeated string tags = 5;
+}
+
+// ListRequestsRequest retrieves paginated requests
+message ListRequestsRequest {
+  string tenant_id = 1;
+  string approver_id = 2;
+  repeated RequestState states = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  int32 page_size = 6;
+  string page_token = 7;
+  string sort_by = 8;
+  bool ascending = 9;
+}
+
+// ListRequestsResponse returns paginated requests
+message ListRequestsResponse {
+  repeated OversightRequest requests = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+// EscalateRequestRequest escalates a request
+message EscalateRequestRequest {
+  string request_id = 1;
+  string escalator_id = 2;
+  EscalationLevel target_level = 3;
+  string reason = 4;
+  bool urgent = 5;
+}
+
+// EscalateResponse confirms escalation
+message EscalateResponse {
+  string request_id = 1;
+  EscalationLevel new_level = 2;
+  repeated Approver new_approvers = 3;
+  google.protobuf.Timestamp escalated_at = 4;
+}
+
+// BulkApproveRequest approves multiple requests
+message BulkApproveRequest {
+  repeated string request_ids = 1;
+  string approver_id = 2;
+  string approver_name = 3;
+  string justification = 4;
+}
+
+// BulkApproveResponse returns bulk approval results
+message BulkApproveResponse {
+  repeated BulkResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+// BulkRejectRequest rejects multiple requests
+message BulkRejectRequest {
+  repeated string request_ids = 1;
+  string rejector_id = 2;
+  string rejector_name = 3;
+  string reason = 4;
+}
+
+// BulkRejectResponse returns bulk rejection results
+message BulkRejectResponse {
+  repeated BulkResult results = 1;
+  int32 successful_count = 2;
+  int32 failed_count = 3;
+}
+
+// BulkResult represents result of a bulk operation
+message BulkResult {
+  string request_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  RequestState new_state = 4;
+}
+
+// CreatePolicyRequest creates oversight policy
+message CreatePolicyRequest {
+  string tenant_id = 1;
+  Policy policy = 2;
+}
+
+// GetPolicyRequest retrieves a policy
+message GetPolicyRequest {
+  string policy_id = 1;
+  string tenant_id = 2;
+}
+
+// ListPoliciesRequest lists policies
+message ListPoliciesRequest {
+  string tenant_id = 1;
+  bool include_inactive = 2;
+}
+
+// ListPoliciesResponse returns policies
+message ListPoliciesResponse {
+  repeated Policy policies = 1;
+}
+
+// GetAuditLogRequest retrieves audit log
+message GetAuditLogRequest {
+  string tenant_id = 1;
+  string request_id = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+  int32 page_size = 5;
+  string page_token = 6;
+}
+
+// AuditLog contains audit trail entries
+message AuditLog {
+  repeated AuditEntry entries = 1;
+  string next_page_token = 2;
+}
+
+// OversightRequest represents a request requiring approval
+message OversightRequest {
+  // Request type classification
+  RequestType type = 1;
+
+  // Subject of the request
+  string subject = 2;
+
+  // Detailed description
+  string description = 3;
+
+  // Structured action details
+  ActionDetails action = 4;
+
+  // Impact assessment
+  ImpactAssessment impact = 5;
+
+  // Risk level
+  RiskLevel risk_level = 6;
+
+  // Required confidence threshold
+  double confidence_threshold = 7;
+
+  // Supporting context
+  google.protobuf.Any context = 8;
+
+  // Requested resources
+  repeated Resource resources = 9;
+
+  // Compliance requirements
+  repeated string compliance_tags = 10;
+}
+
+// AgentInfo describes the requesting agent
+message AgentInfo {
+  string agent_id = 1;
+  string agent_type = 2;
+  string agent_name = 3;
+  string version = 4;
+  TrustLevel trust_level = 5;
+  repeated string capabilities = 6;
+}
+
+// ActionDetails specifies the requested action
+message ActionDetails {
+  string action_type = 1;
+  repeated Parameter parameters = 2;
+  google.protobuf.Any payload = 3;
+  bool reversible = 4;
+  google.protobuf.Duration estimated_duration = 5;
+
+  message Parameter {
+    string key = 1;
+    string value = 2;
+    bool sensitive = 3;
+  }
+}
+
+// ImpactAssessment evaluates potential impact
+message ImpactAssessment {
+  Scope scope = 1;
+  Severity severity = 2;
+  repeated string affected_systems = 3;
+  repeated string affected_users = 4;
+  int32 estimated_user_count = 5;
+  repeated Dependency dependencies = 6;
+  ReversibilityInfo reversibility = 7;
+
+  message Dependency {
+    string service = 1;
+    DependencyType type = 2;
+  }
+}
+
+// ReversibilityInfo describes undo capabilities
+message ReversibilityInfo {
+  bool is_reversible = 1;
+  google.protobuf.Duration reversal_window = 2;
+  string reversal_procedure = 3;
+}
+
+// Resource represents requested resource
+message Resource {
+  string resource_type = 1;
+  string resource_id = 2;
+  string resource_name = 3;
+  repeated string required_permissions = 4;
+}
+
+// ApprovalDecision represents an approval decision
+message ApprovalDecision {
+  DecisionType decision = 1;
+  string approver_id = 2;
+  string approver_name = 3;
+  google.protobuf.Timestamp decided_at = 4;
+  string justification = 5;
+  map<string, string> conditions = 6;
+  google.protobuf.Duration validity_period = 7;
+}
+
+// Approver represents an approval authority
+message Approver {
+  string approver_id = 1;
+  string approver_name = 2;
+  string approver_email = 3;
+  ApproverRole role = 4;
+  AuthorityLevel authority_level = 5;
+  repeated string specializations = 6;
+}
+
+// StatusTransition tracks state changes
+message StatusTransition {
+  RequestState from_state = 1;
+  RequestState to_state = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  string actor_id = 4;
+  string reason = 5;
+}
+
+// Policy defines oversight requirements
+message Policy {
+  string policy_id = 1;
+  string policy_name = 2;
+  string description = 3;
+  PolicyRules rules = 4;
+  EscalationChain escalation_chain = 5;
+  bool active = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// PolicyRules defines approval requirements
+message PolicyRules {
+  int32 required_approvals = 1;
+  repeated ApproverRole required_roles = 2;
+  google.protobuf.Duration auto_approve_after = 3;
+  google.protobuf.Duration auto_reject_after = 4;
+  repeated Condition conditions = 5;
+
+  message Condition {
+    string field = 1;
+    ConditionOperator operator = 2;
+    string value = 3;
+  }
+}
+
+// EscalationChain defines escalation path
+message EscalationChain {
+  repeated EscalationLevel levels = 1;
+
+  message EscalationLevel {
+    int32 level = 1;
+    repeated Approver approvers = 2;
+    google.protobuf.Duration timeout = 3;
+  }
+}
+
+// AuditEntry records an audit event
+message AuditEntry {
+  string entry_id = 1;
+  string request_id = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  string actor_id = 4;
+  string action = 5;
+  RequestState previous_state = 6;
+  RequestState new_state = 7;
+  map<string, string> details = 8;
+}
+
+// Enums
+
+enum RequestType {
+  REQUEST_TYPE_UNSPECIFIED = 0;
+  REQUEST_TYPE_RESOURCE_ACCESS = 1;
+  REQUEST_TYPE_DATA_MODIFICATION = 2;
+  REQUEST_TYPE_SYSTEM_CONFIGURATION = 3;
+  REQUEST_TYPE_AGENT_DEPLOYMENT = 4;
+  REQUEST_TYPE_FINANCIAL_TRANSACTION = 5;
+  REQUEST_TYPE_EXTERNAL_API_CALL = 6;
+  REQUEST_TYPE_USER_INTERACTION = 7;
+  REQUEST_TYPE_COMPLIANCE_ACTION = 8;
+}
+
+enum RequestState {
+  REQUEST_STATE_UNSPECIFIED = 0;
+  REQUEST_STATE_PENDING = 1;
+  REQUEST_STATE_REVIEWING = 2;
+  REQUEST_STATE_APPROVED = 3;
+  REQUEST_STATE_REJECTED = 4;
+  REQUEST_STATE_EXPIRED = 5;
+  REQUEST_STATE_ESCALATED = 6;
+  REQUEST_STATE_CANCELLED = 7;
+}
+
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_LOW = 1;
+  PRIORITY_MEDIUM = 2;
+  PRIORITY_HIGH = 3;
+  PRIORITY_CRITICAL = 4;
+}
+
+enum RiskLevel {
+  RISK_LEVEL_UNSPECIFIED = 0;
+  RISK_LEVEL_LOW = 1;
+  RISK_LEVEL_MEDIUM = 2;
+  RISK_LEVEL_HIGH = 3;
+  RISK_LEVEL_CRITICAL = 4;
+}
+
+enum TrustLevel {
+  TRUST_LEVEL_UNSPECIFIED = 0;
+  TRUST_LEVEL_UNTRUSTED = 1;
+  TRUST_LEVEL_LOW = 2;
+  TRUST_LEVEL_MEDIUM = 3;
+  TRUST_LEVEL_HIGH = 4;
+  TRUST_LEVEL_VERIFIED = 5;
+}
+
+enum Scope {
+  SCOPE_UNSPECIFIED = 0;
+  SCOPE_SINGLE_USER = 1;
+  SCOPE_TEAM = 2;
+  SCOPE_ORGANIZATION = 3;
+  SCOPE_GLOBAL = 4;
+}
+
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_MINIMAL = 1;
+  SEVERITY_LOW = 2;
+  SEVERITY_MEDIUM = 3;
+  SEVERITY_HIGH = 4;
+  SEVERITY_CRITICAL = 5;
+}
+
+enum DependencyType {
+  DEPENDENCY_TYPE_UNSPECIFIED = 0;
+  DEPENDENCY_TYPE_REQUIRED = 1;
+  DEPENDENCY_TYPE_OPTIONAL = 2;
+  DEPENDENCY_TYPE_BLOCKING = 3;
+}
+
+enum DecisionType {
+  DECISION_TYPE_UNSPECIFIED = 0;
+  DECISION_TYPE_APPROVED = 1;
+  DECISION_TYPE_REJECTED = 2;
+  DECISION_TYPE_CONDITIONAL_APPROVAL = 3;
+}
+
+enum ApproverRole {
+  APPROVER_ROLE_UNSPECIFIED = 0;
+  APPROVER_ROLE_SUPERVISOR = 1;
+  APPROVER_ROLE_MANAGER = 2;
+  APPROVER_ROLE_ADMIN = 3;
+  APPROVER_ROLE_COMPLIANCE_OFFICER = 4;
+  APPROVER_ROLE_SECURITY_OFFICER = 5;
+}
+
+enum AuthorityLevel {
+  AUTHORITY_LEVEL_UNSPECIFIED = 0;
+  AUTHORITY_LEVEL_BASIC = 1;
+  AUTHORITY_LEVEL_INTERMEDIATE = 2;
+  AUTHORITY_LEVEL_ADVANCED = 3;
+  AUTHORITY_LEVEL_EXECUTIVE = 4;
+}
+
+enum RejectionCategory {
+  REJECTION_CATEGORY_UNSPECIFIED = 0;
+  REJECTION_CATEGORY_POLICY_VIOLATION = 1;
+  REJECTION_CATEGORY_INSUFFICIENT_JUSTIFICATION = 2;
+  REJECTION_CATEGORY_SECURITY_CONCERN = 3;
+  REJECTION_CATEGORY_COMPLIANCE_ISSUE = 4;
+  REJECTION_CATEGORY_RESOURCE_UNAVAILABLE = 5;
+}
+
+enum EscalationLevel {
+  ESCALATION_LEVEL_UNSPECIFIED = 0;
+  ESCALATION_LEVEL_L1 = 1;
+  ESCALATION_LEVEL_L2 = 2;
+  ESCALATION_LEVEL_L3 = 3;
+  ESCALATION_LEVEL_EXECUTIVE = 4;
+}
+
+enum ConditionOperator {
+  CONDITION_OPERATOR_UNSPECIFIED = 0;
+  CONDITION_OPERATOR_EQUALS = 1;
+  CONDITION_OPERATOR_NOT_EQUALS = 2;
+  CONDITION_OPERATOR_GREATER_THAN = 3;
+  CONDITION_OPERATOR_LESS_THAN = 4;
+  CONDITION_OPERATOR_CONTAINS = 5;
+}

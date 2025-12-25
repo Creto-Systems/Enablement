@@ -1,0 +1,930 @@
+openapi: 3.1.0
+info:
+  title: Oversight API
+  description: |
+    The Oversight API provides approval workflows, escalation management, and decision tracking
+    for autonomous agent operations requiring human oversight. Support multi-level approval chains,
+    timeout policies, and webhook notifications for real-time decision delivery.
+
+    ## Features
+    - Multi-level approval workflows with role-based routing
+    - Automatic escalation on timeout or rejection
+    - Webhook callbacks for asynchronous decision delivery
+    - Audit trail for all approval decisions
+    - Parallel and sequential approval chains
+    - Custom metadata and context preservation
+
+    ## Approval Flow
+    1. Agent creates oversight request with context
+    2. Request routed to approvers based on rules
+    3. Approver reviews and approves/rejects/escalates
+    4. System triggers webhooks on state changes
+    5. Final decision delivered to agent
+
+    ## Authentication
+    All endpoints require authentication via Bearer JWT token or API Key.
+  version: 1.0.0
+  contact:
+    name: Enablement Platform Team
+    email: api-support@enablement.dev
+    url: https://enablement.dev/support
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://api.enablement.dev
+    description: Production server
+  - url: https://api-staging.enablement.dev
+    description: Staging server
+  - url: http://localhost:8081
+    description: Local development server
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+tags:
+  - name: Requests
+    description: Oversight request creation and management
+  - name: Decisions
+    description: Approval and rejection workflows
+  - name: Escalations
+    description: Escalation chain management
+  - name: Webhooks
+    description: Webhook configuration and callbacks
+
+paths:
+  /v1/requests:
+    post:
+      summary: Create oversight request
+      description: |
+        Create a new oversight request requiring human approval. The request includes
+        action details, context, approver routing, and timeout policies. System automatically
+        routes to appropriate approvers based on rules and escalation chains.
+      operationId: createRequest
+      tags:
+        - Requests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OversightRequest'
+            examples:
+              simple_approval:
+                summary: Simple approval request
+                value:
+                  request_id: "req_4Nk8fJ3mP2qR"
+                  agent_id: "agent_7Hf3kL9mQ2pR"
+                  action_type: "data_deletion"
+                  action_description: "Delete user records older than 7 years"
+                  context:
+                    record_count: 15420
+                    data_types: ["user_profiles", "activity_logs"]
+                    retention_policy: "GDPR-7year"
+                  required_approvers: ["manager@company.com"]
+                  timeout_seconds: 3600
+                  callback_url: "https://agent.company.com/webhooks/approval"
+              multi_level_approval:
+                summary: Multi-level approval with escalation
+                value:
+                  request_id: "req_9Xm2dK7nL4pQ"
+                  agent_id: "agent_7Hf3kL9mQ2pR"
+                  action_type: "financial_transaction"
+                  action_description: "Execute wire transfer of $50,000 to vendor"
+                  context:
+                    amount_usd: 50000
+                    vendor: "Acme Corp"
+                    invoice_id: "INV-2025-1234"
+                    purpose: "Annual software license renewal"
+                  approval_chain:
+                    - level: 1
+                      approvers: ["manager@company.com"]
+                      required_count: 1
+                      timeout_seconds: 1800
+                    - level: 2
+                      approvers: ["cfo@company.com", "ceo@company.com"]
+                      required_count: 2
+                      timeout_seconds: 3600
+                  escalation_chain:
+                    - level: 1
+                      escalate_to: ["director@company.com"]
+                      trigger: "timeout"
+                    - level: 2
+                      escalate_to: ["board@company.com"]
+                      trigger: "rejection"
+                  callback_url: "https://agent.company.com/webhooks/approval"
+                  metadata:
+                    priority: "high"
+                    compliance_required: true
+      responses:
+        '201':
+          description: Request created successfully
+          headers:
+            Location:
+              description: URL of created request
+              schema:
+                type: string
+                example: "/v1/requests/req_4Nk8fJ3mP2qR"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                  state:
+                    type: string
+                    enum: [PENDING, APPROVED, REJECTED, ESCALATED, TIMEOUT]
+                  created_at:
+                    type: string
+                    format: date-time
+                  expires_at:
+                    type: string
+                    format: date-time
+              example:
+                request_id: "req_4Nk8fJ3mP2qR"
+                state: "PENDING"
+                created_at: "2025-12-25T10:30:00Z"
+                expires_at: "2025-12-25T11:30:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      summary: List oversight requests
+      description: |
+        Retrieve oversight requests with filtering by state, agent, approver, or time range.
+        Results are paginated and sorted by creation time.
+      operationId: listRequests
+      tags:
+        - Requests
+      parameters:
+        - name: state
+          in: query
+          description: Filter by request state
+          schema:
+            type: string
+            enum: [PENDING, APPROVED, REJECTED, ESCALATED, TIMEOUT, ALL]
+            default: ALL
+          example: "PENDING"
+        - name: agent_id
+          in: query
+          description: Filter by agent ID
+          schema:
+            type: string
+          example: "agent_7Hf3kL9mQ2pR"
+        - name: approver
+          in: query
+          description: Filter by approver email
+          schema:
+            type: string
+          example: "manager@company.com"
+        - name: created_after
+          in: query
+          description: Filter requests created after timestamp
+          schema:
+            type: string
+            format: date-time
+          example: "2025-12-01T00:00:00Z"
+        - name: created_before
+          in: query
+          description: Filter requests created before timestamp
+          schema:
+            type: string
+            format: date-time
+          example: "2025-12-25T23:59:59Z"
+        - name: page
+          in: query
+          description: Page number (1-indexed)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          description: Items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Requests retrieved successfully
+          headers:
+            X-Total-Count:
+              description: Total number of matching requests
+              schema:
+                type: integer
+            Link:
+              description: Pagination links
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OversightRequest'
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      page_size:
+                        type: integer
+                      total_pages:
+                        type: integer
+                      total_items:
+                        type: integer
+              example:
+                requests:
+                  - request_id: "req_4Nk8fJ3mP2qR"
+                    agent_id: "agent_7Hf3kL9mQ2pR"
+                    action_type: "data_deletion"
+                    state: "PENDING"
+                    created_at: "2025-12-25T10:30:00Z"
+                pagination:
+                  page: 1
+                  page_size: 50
+                  total_pages: 1
+                  total_items: 1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/requests/{id}:
+    get:
+      summary: Get request details
+      description: |
+        Retrieve complete details for a specific oversight request including current state,
+        approval history, and decision context.
+      operationId: getRequest
+      tags:
+        - Requests
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Request identifier
+          schema:
+            type: string
+          example: "req_4Nk8fJ3mP2qR"
+      responses:
+        '200':
+          description: Request details retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/OversightRequest'
+                  - type: object
+                    properties:
+                      history:
+                        type: array
+                        description: Audit trail of all state changes
+                        items:
+                          type: object
+                          properties:
+                            timestamp:
+                              type: string
+                              format: date-time
+                            state:
+                              type: string
+                            actor:
+                              type: string
+                            reason:
+                              type: string
+              example:
+                request_id: "req_4Nk8fJ3mP2qR"
+                agent_id: "agent_7Hf3kL9mQ2pR"
+                action_type: "data_deletion"
+                action_description: "Delete user records older than 7 years"
+                state: "APPROVED"
+                created_at: "2025-12-25T10:30:00Z"
+                updated_at: "2025-12-25T10:45:00Z"
+                history:
+                  - timestamp: "2025-12-25T10:30:00Z"
+                    state: "PENDING"
+                    actor: "system"
+                    reason: "Request created"
+                  - timestamp: "2025-12-25T10:45:00Z"
+                    state: "APPROVED"
+                    actor: "manager@company.com"
+                    reason: "GDPR compliance requirement met"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Cancel oversight request
+      description: |
+        Cancel a pending oversight request. Only requests in PENDING or ESCALATED state
+        can be cancelled. Approved or rejected requests cannot be cancelled.
+      operationId: cancelRequest
+      tags:
+        - Requests
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Request identifier
+          schema:
+            type: string
+          example: "req_4Nk8fJ3mP2qR"
+      responses:
+        '204':
+          description: Request cancelled successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/requests/{id}/approve:
+    post:
+      summary: Approve oversight request
+      description: |
+        Approve an oversight request. If multi-level approval is required, request advances
+        to next approval level. Final approval triggers callback webhook to agent.
+      operationId: approveRequest
+      tags:
+        - Decisions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Request identifier
+          schema:
+            type: string
+          example: "req_4Nk8fJ3mP2qR"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecision'
+            example:
+              approver: "manager@company.com"
+              reason: "Action aligns with GDPR compliance requirements"
+              metadata:
+                review_duration_seconds: 180
+                compliance_check: "passed"
+      responses:
+        '200':
+          description: Request approved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                  state:
+                    type: string
+                    enum: [PENDING, APPROVED]
+                  next_level:
+                    type: integer
+                    description: Next approval level if multi-level
+                  final_decision:
+                    type: boolean
+                    description: True if this was final approval
+                  updated_at:
+                    type: string
+                    format: date-time
+              example:
+                request_id: "req_4Nk8fJ3mP2qR"
+                state: "APPROVED"
+                next_level: null
+                final_decision: true
+                updated_at: "2025-12-25T10:45:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/requests/{id}/reject:
+    post:
+      summary: Reject oversight request
+      description: |
+        Reject an oversight request. Rejection may trigger escalation based on configured
+        escalation chain. Final rejection triggers callback webhook to agent.
+      operationId: rejectRequest
+      tags:
+        - Decisions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Request identifier
+          schema:
+            type: string
+          example: "req_4Nk8fJ3mP2qR"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecision'
+            example:
+              approver: "manager@company.com"
+              reason: "Insufficient documentation for compliance audit"
+              metadata:
+                required_documentation: ["legal_review", "privacy_impact_assessment"]
+                escalate: true
+      responses:
+        '200':
+          description: Request rejected successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                  state:
+                    type: string
+                    enum: [REJECTED, ESCALATED]
+                  escalated_to:
+                    type: array
+                    items:
+                      type: string
+                    description: Escalation recipients if triggered
+                  updated_at:
+                    type: string
+                    format: date-time
+              example:
+                request_id: "req_4Nk8fJ3mP2qR"
+                state: "ESCALATED"
+                escalated_to: ["director@company.com"]
+                updated_at: "2025-12-25T10:50:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/requests/{id}/escalate:
+    post:
+      summary: Manually escalate request
+      description: |
+        Manually escalate a request to higher approval level or different approvers.
+        Useful for complex decisions requiring additional oversight.
+      operationId: escalateRequest
+      tags:
+        - Escalations
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Request identifier
+          schema:
+            type: string
+          example: "req_4Nk8fJ3mP2qR"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - escalate_to
+                - reason
+              properties:
+                escalate_to:
+                  type: array
+                  items:
+                    type: string
+                  description: Email addresses to escalate to
+                escalator:
+                  type: string
+                  description: Who is escalating
+                reason:
+                  type: string
+                  description: Reason for escalation
+                timeout_seconds:
+                  type: integer
+                  minimum: 60
+                  description: Timeout for escalated approval
+            example:
+              escalate_to: ["cfo@company.com", "legal@company.com"]
+              escalator: "manager@company.com"
+              reason: "Requires legal review for regulatory compliance"
+              timeout_seconds: 7200
+      responses:
+        '200':
+          description: Request escalated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                  state:
+                    type: string
+                  escalated_to:
+                    type: array
+                    items:
+                      type: string
+                  escalation_level:
+                    type: integer
+                  updated_at:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token authentication
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key authentication
+
+  schemas:
+    OversightRequest:
+      type: object
+      required:
+        - request_id
+        - agent_id
+        - action_type
+        - action_description
+        - required_approvers
+      properties:
+        request_id:
+          type: string
+          description: Unique request identifier
+          pattern: '^req_[a-zA-Z0-9]{12,16}$'
+          example: "req_4Nk8fJ3mP2qR"
+        agent_id:
+          type: string
+          description: Requesting agent identifier
+          pattern: '^agent_[a-zA-Z0-9]{12,16}$'
+          example: "agent_7Hf3kL9mQ2pR"
+        action_type:
+          type: string
+          description: Type of action requiring approval
+          enum:
+            - data_deletion
+            - financial_transaction
+            - system_configuration
+            - user_modification
+            - external_api_call
+            - custom
+          example: "data_deletion"
+        action_description:
+          type: string
+          description: Detailed description of proposed action
+          maxLength: 2000
+          example: "Delete user records older than 7 years per GDPR requirements"
+        context:
+          type: object
+          description: Additional context for approval decision
+          additionalProperties: true
+          example:
+            record_count: 15420
+            data_types: ["user_profiles", "activity_logs"]
+        required_approvers:
+          type: array
+          description: List of required approver emails (simple approval)
+          items:
+            type: string
+            format: email
+          minItems: 1
+          example: ["manager@company.com"]
+        approval_chain:
+          type: array
+          description: Multi-level approval chain configuration
+          items:
+            $ref: '#/components/schemas/ApprovalLevel'
+        escalation_chain:
+          type: array
+          description: Escalation routing configuration
+          items:
+            $ref: '#/components/schemas/EscalationChain'
+        timeout_seconds:
+          type: integer
+          description: Timeout before automatic escalation/rejection
+          minimum: 60
+          default: 3600
+          example: 3600
+        callback_url:
+          type: string
+          format: uri
+          description: Webhook URL for decision callback
+          example: "https://agent.company.com/webhooks/approval"
+        state:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED, ESCALATED, TIMEOUT]
+          description: Current request state
+          example: "PENDING"
+        created_at:
+          type: string
+          format: date-time
+          description: Request creation timestamp
+          example: "2025-12-25T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+          example: "2025-12-25T10:45:00Z"
+        expires_at:
+          type: string
+          format: date-time
+          description: Request expiration timestamp
+          example: "2025-12-25T11:30:00Z"
+        metadata:
+          type: object
+          description: Custom metadata
+          additionalProperties: true
+
+    ApprovalLevel:
+      type: object
+      required:
+        - level
+        - approvers
+        - required_count
+      properties:
+        level:
+          type: integer
+          description: Approval level number (sequential)
+          minimum: 1
+          example: 1
+        approvers:
+          type: array
+          description: Approvers at this level
+          items:
+            type: string
+            format: email
+          minItems: 1
+          example: ["manager@company.com"]
+        required_count:
+          type: integer
+          description: Number of approvals required from this level
+          minimum: 1
+          example: 1
+        timeout_seconds:
+          type: integer
+          description: Timeout for this approval level
+          minimum: 60
+          example: 1800
+        parallel:
+          type: boolean
+          description: True if approvals at this level can be parallel
+          default: true
+
+    EscalationChain:
+      type: object
+      required:
+        - level
+        - escalate_to
+        - trigger
+      properties:
+        level:
+          type: integer
+          description: Escalation level
+          minimum: 1
+          example: 1
+        escalate_to:
+          type: array
+          description: Escalation recipients
+          items:
+            type: string
+            format: email
+          minItems: 1
+          example: ["director@company.com"]
+        trigger:
+          type: string
+          description: Condition that triggers escalation
+          enum: [timeout, rejection, manual]
+          example: "timeout"
+        timeout_seconds:
+          type: integer
+          description: Timeout for escalated approval
+          minimum: 60
+          example: 3600
+
+    ApprovalDecision:
+      type: object
+      required:
+        - approver
+        - reason
+      properties:
+        approver:
+          type: string
+          format: email
+          description: Email of person making decision
+          example: "manager@company.com"
+        reason:
+          type: string
+          description: Justification for decision
+          maxLength: 1000
+          example: "Action aligns with company policy"
+        metadata:
+          type: object
+          description: Additional decision context
+          additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - timestamp
+      properties:
+        error:
+          type: string
+          example: "invalid_request"
+        message:
+          type: string
+          example: "Missing required field: action_type"
+        details:
+          type: object
+          additionalProperties: true
+        request_id:
+          type: string
+          example: "req_9Xk2dL7mN4pQ"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-12-25T10:30:00.123Z"
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+webhooks:
+  approval_callback:
+    post:
+      summary: Approval decision callback
+      description: |
+        Webhook triggered when oversight request receives final decision (approved or rejected).
+        Sent to callback_url specified in original request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - request_id
+                - decision
+                - timestamp
+              properties:
+                request_id:
+                  type: string
+                  example: "req_4Nk8fJ3mP2qR"
+                decision:
+                  type: string
+                  enum: [APPROVED, REJECTED, TIMEOUT]
+                  example: "APPROVED"
+                approver:
+                  type: string
+                  format: email
+                  example: "manager@company.com"
+                reason:
+                  type: string
+                  example: "Action approved per company policy"
+                timestamp:
+                  type: string
+                  format: date-time
+                  example: "2025-12-25T10:45:00Z"
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Callback acknowledged
+
+  escalation_notification:
+    post:
+      summary: Escalation notification webhook
+      description: |
+        Webhook triggered when request is escalated to higher approval level.
+        Notifies relevant parties of escalation event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - request_id
+                - escalation_level
+                - escalated_to
+                - trigger
+                - timestamp
+              properties:
+                request_id:
+                  type: string
+                  example: "req_4Nk8fJ3mP2qR"
+                escalation_level:
+                  type: integer
+                  example: 2
+                escalated_to:
+                  type: array
+                  items:
+                    type: string
+                  example: ["director@company.com"]
+                trigger:
+                  type: string
+                  enum: [timeout, rejection, manual]
+                  example: "timeout"
+                previous_approver:
+                  type: string
+                  example: "manager@company.com"
+                reason:
+                  type: string
+                  example: "Request timed out after 30 minutes"
+                timestamp:
+                  type: string
+                  format: date-time
+                  example: "2025-12-25T11:00:00Z"
+      responses:
+        '200':
+          description: Notification acknowledged

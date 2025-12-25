@@ -1,0 +1,641 @@
+// Copyright 2025 Creto
+// Licensed under the Apache License, Version 2.0
+
+// Runtime Service API Specification
+// Issue #53: Runtime Service Integration
+//
+// This service manages isolated execution environments (sandboxes)
+// for autonomous agents with resource limits and security controls.
+
+syntax = "proto3";
+
+package creto.runtime.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/creto/enablement/gen/go/runtime/v1;runtimev1";
+option java_multiple_files = true;
+option java_package = "io.creto.runtime.v1";
+option java_outer_classname = "RuntimeProto";
+
+// RuntimeService manages isolated execution environments (sandboxes)
+// for autonomous agent operations with security and resource controls.
+service RuntimeService {
+  // CreateSandbox provisions a new isolated sandbox environment
+  // Rate limit: 10 requests/second per tenant
+  rpc CreateSandbox(CreateSandboxRequest) returns (Sandbox) {}
+
+  // GetSandbox retrieves sandbox details and status
+  rpc GetSandbox(GetSandboxRequest) returns (Sandbox) {}
+
+  // ListSandboxes retrieves all sandboxes for a tenant
+  rpc ListSandboxes(ListSandboxesRequest) returns (ListSandboxesResponse) {}
+
+  // ExecuteCommand runs a command in a sandbox
+  // Rate limit: 100 requests/second per sandbox
+  rpc ExecuteCommand(ExecuteCommandRequest) returns (ExecuteCommandResponse) {}
+
+  // StreamExecution streams command output in real-time
+  rpc StreamExecution(StreamExecutionRequest) returns (stream ExecutionChunk) {}
+
+  // TerminateSandbox shuts down and cleans up a sandbox
+  rpc TerminateSandbox(TerminateSandboxRequest) returns (TerminateResponse) {}
+
+  // UpdateSandbox modifies sandbox configuration
+  rpc UpdateSandbox(UpdateSandboxRequest) returns (Sandbox) {}
+
+  // GetSandboxMetrics retrieves resource usage metrics
+  rpc GetSandboxMetrics(GetSandboxMetricsRequest) returns (SandboxMetrics) {}
+
+  // StreamMetrics streams real-time metrics
+  rpc StreamMetrics(StreamMetricsRequest) returns (stream MetricsUpdate) {}
+
+  // ClaimFromPool claims a pre-warmed sandbox from the pool
+  // Significantly faster than CreateSandbox
+  rpc ClaimFromPool(ClaimFromPoolRequest) returns (Sandbox) {}
+
+  // ReturnToPool returns a sandbox to the pool for reuse
+  rpc ReturnToPool(ReturnToPoolRequest) returns (ReturnToPoolResponse) {}
+
+  // CreateSnapshot creates a snapshot of sandbox state
+  rpc CreateSnapshot(CreateSnapshotRequest) returns (Snapshot) {}
+
+  // RestoreSnapshot restores sandbox from a snapshot
+  rpc RestoreSnapshot(RestoreSnapshotRequest) returns (Sandbox) {}
+
+  // UploadFile uploads a file to the sandbox
+  rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse) {}
+
+  // DownloadFile downloads a file from the sandbox
+  rpc DownloadFile(DownloadFileRequest) returns (stream DownloadFileChunk) {}
+
+  // GetLogs retrieves sandbox execution logs
+  rpc GetLogs(GetLogsRequest) returns (LogStream) {}
+}
+
+// CreateSandboxRequest provisions a new sandbox
+message CreateSandboxRequest {
+  // Tenant identifier
+  string tenant_id = 1;
+
+  // Agent identifier requesting the sandbox
+  string agent_id = 2;
+
+  // Sandbox specification
+  SandboxSpec spec = 3;
+
+  // Runtime type
+  RuntimeType runtime = 4;
+
+  // Resource limits
+  ResourceLimits limits = 5;
+
+  // Network configuration
+  NetworkConfig network = 6;
+
+  // Security settings
+  SecurityConfig security = 7;
+
+  // Initial environment variables
+  map<string, string> env_vars = 8;
+
+  // Labels for organization
+  map<string, string> labels = 9;
+
+  // Timeout for sandbox auto-termination
+  google.protobuf.Duration max_lifetime = 10;
+
+  // Whether to use pool for faster provisioning
+  bool use_pool = 11;
+}
+
+// GetSandboxRequest retrieves sandbox details
+message GetSandboxRequest {
+  string sandbox_id = 1;
+  bool include_metrics = 2;
+  bool include_logs = 3;
+}
+
+// ListSandboxesRequest lists sandboxes
+message ListSandboxesRequest {
+  string tenant_id = 1;
+  string agent_id = 2;
+  repeated SandboxState states = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+  map<string, string> label_filters = 6;
+}
+
+// ListSandboxesResponse returns sandbox list
+message ListSandboxesResponse {
+  repeated Sandbox sandboxes = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+// ExecuteCommandRequest runs a command
+message ExecuteCommandRequest {
+  string sandbox_id = 1;
+  Command command = 2;
+  google.protobuf.Duration timeout = 3;
+  map<string, string> env_vars = 4;
+  string working_directory = 5;
+  bool capture_output = 6;
+}
+
+// ExecuteCommandResponse returns command results
+message ExecuteCommandResponse {
+  string execution_id = 1;
+  int32 exit_code = 2;
+  string stdout = 3;
+  string stderr = 4;
+  google.protobuf.Duration execution_time = 5;
+  ResourceUsage resource_usage = 6;
+  ExecutionStatus status = 7;
+}
+
+// StreamExecutionRequest streams command execution
+message StreamExecutionRequest {
+  string sandbox_id = 1;
+  Command command = 2;
+  google.protobuf.Duration timeout = 3;
+  map<string, string> env_vars = 4;
+}
+
+// ExecutionChunk streams output
+message ExecutionChunk {
+  string execution_id = 1;
+  StreamType stream_type = 2;
+  bytes data = 3;
+  bool is_final = 4;
+  int32 exit_code = 5;
+}
+
+// TerminateSandboxRequest terminates sandbox
+message TerminateSandboxRequest {
+  string sandbox_id = 1;
+  bool force = 2;
+  bool preserve_data = 3;
+}
+
+// TerminateResponse confirms termination
+message TerminateResponse {
+  string sandbox_id = 1;
+  google.protobuf.Timestamp terminated_at = 2;
+  ResourceUsage final_usage = 3;
+}
+
+// UpdateSandboxRequest modifies sandbox
+message UpdateSandboxRequest {
+  string sandbox_id = 1;
+  ResourceLimits new_limits = 2;
+  map<string, string> env_vars_to_add = 3;
+  repeated string env_vars_to_remove = 4;
+  google.protobuf.Duration extend_lifetime = 5;
+}
+
+// GetSandboxMetricsRequest retrieves metrics
+message GetSandboxMetricsRequest {
+  string sandbox_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  google.protobuf.Duration granularity = 4;
+}
+
+// StreamMetricsRequest streams metrics
+message StreamMetricsRequest {
+  string sandbox_id = 1;
+  google.protobuf.Duration interval = 2;
+}
+
+// MetricsUpdate streams metric updates
+message MetricsUpdate {
+  google.protobuf.Timestamp timestamp = 1;
+  SandboxMetrics metrics = 2;
+}
+
+// ClaimFromPoolRequest claims pooled sandbox
+message ClaimFromPoolRequest {
+  string tenant_id = 1;
+  string agent_id = 2;
+  RuntimeType runtime = 3;
+  SandboxSpec spec = 4;
+  google.protobuf.Duration max_wait = 5;
+}
+
+// ReturnToPoolRequest returns sandbox to pool
+message ReturnToPoolRequest {
+  string sandbox_id = 1;
+  bool reset_state = 2;
+}
+
+// ReturnToPoolResponse confirms pool return
+message ReturnToPoolResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// CreateSnapshotRequest creates snapshot
+message CreateSnapshotRequest {
+  string sandbox_id = 1;
+  string snapshot_name = 2;
+  string description = 3;
+  bool include_memory = 4;
+}
+
+// RestoreSnapshotRequest restores snapshot
+message RestoreSnapshotRequest {
+  string snapshot_id = 1;
+  string sandbox_id = 2;
+}
+
+// UploadFileRequest uploads file (streaming)
+message UploadFileRequest {
+  oneof data {
+    FileMetadata metadata = 1;
+    bytes chunk = 2;
+  }
+}
+
+// UploadFileResponse confirms upload
+message UploadFileResponse {
+  string file_id = 1;
+  string path = 2;
+  int64 size = 3;
+}
+
+// DownloadFileRequest downloads file
+message DownloadFileRequest {
+  string sandbox_id = 1;
+  string path = 2;
+}
+
+// DownloadFileChunk streams file data
+message DownloadFileChunk {
+  oneof data {
+    FileMetadata metadata = 1;
+    bytes chunk = 2;
+  }
+}
+
+// GetLogsRequest retrieves logs
+message GetLogsRequest {
+  string sandbox_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  LogLevel min_level = 4;
+  int32 max_lines = 5;
+  bool follow = 6;
+}
+
+// LogStream returns logs
+message LogStream {
+  repeated LogEntry entries = 1;
+  bool has_more = 2;
+}
+
+// Sandbox represents an isolated execution environment
+message Sandbox {
+  // Unique sandbox identifier
+  string sandbox_id = 1;
+
+  // Tenant and agent ownership
+  string tenant_id = 2;
+  string agent_id = 3;
+
+  // Sandbox specification
+  SandboxSpec spec = 4;
+
+  // Current state
+  SandboxState state = 5;
+
+  // Runtime type
+  RuntimeType runtime = 6;
+
+  // Resource limits and usage
+  ResourceLimits limits = 7;
+  ResourceUsage current_usage = 8;
+
+  // Network configuration
+  NetworkConfig network = 9;
+
+  // Security settings
+  SecurityConfig security = 10;
+
+  // Timestamps
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp started_at = 12;
+  google.protobuf.Timestamp terminated_at = 13;
+  google.protobuf.Timestamp expires_at = 14;
+
+  // Connection information
+  ConnectionInfo connection = 15;
+
+  // Labels and metadata
+  map<string, string> labels = 16;
+  map<string, string> metadata = 17;
+
+  // Health status
+  HealthStatus health = 18;
+}
+
+// SandboxSpec defines sandbox configuration
+message SandboxSpec {
+  // Base image or runtime environment
+  string image = 1;
+  string image_tag = 2;
+
+  // Working directory
+  string working_directory = 3;
+
+  // Startup command
+  repeated string command = 4;
+  repeated string args = 5;
+
+  // Pre-installed packages
+  repeated string packages = 6;
+
+  // Volume mounts
+  repeated VolumeMount volumes = 7;
+
+  // Initialization scripts
+  repeated InitScript init_scripts = 8;
+}
+
+// ResourceLimits defines resource constraints
+message ResourceLimits {
+  // CPU limit in millicores (1000 = 1 CPU)
+  int32 cpu_millis = 1;
+
+  // Memory limit in bytes
+  int64 memory_bytes = 2;
+
+  // Storage limit in bytes
+  int64 storage_bytes = 3;
+
+  // Network bandwidth limit in bytes/second
+  int64 network_bandwidth_bps = 4;
+
+  // GPU allocation (0 = no GPU)
+  int32 gpu_count = 5;
+
+  // Maximum concurrent processes
+  int32 max_processes = 6;
+
+  // Maximum file descriptors
+  int32 max_file_descriptors = 7;
+
+  // I/O operations per second limit
+  int32 iops_limit = 8;
+}
+
+// ResourceUsage tracks actual resource consumption
+message ResourceUsage {
+  // CPU usage in millicores
+  int32 cpu_millis = 1;
+
+  // Memory usage in bytes
+  int64 memory_bytes = 2;
+
+  // Storage usage in bytes
+  int64 storage_bytes = 3;
+
+  // Network egress in bytes
+  int64 network_egress_bytes = 4;
+
+  // Network ingress in bytes
+  int64 network_ingress_bytes = 5;
+
+  // GPU utilization percentage
+  double gpu_utilization = 6;
+
+  // Uptime
+  google.protobuf.Duration uptime = 7;
+
+  // Process count
+  int32 process_count = 8;
+}
+
+// NetworkConfig defines network settings
+message NetworkConfig {
+  // Network mode
+  NetworkMode mode = 1;
+
+  // Port mappings (container:host)
+  repeated PortMapping ports = 2;
+
+  // DNS servers
+  repeated string dns_servers = 3;
+
+  // Allowed outbound hosts
+  repeated string allowed_hosts = 4;
+
+  // Blocked outbound hosts
+  repeated string blocked_hosts = 5;
+
+  // Enable IPv6
+  bool ipv6_enabled = 6;
+}
+
+// SecurityConfig defines security settings
+message SecurityConfig {
+  // Run as user (UID)
+  int32 user_id = 1;
+
+  // Run as group (GID)
+  int32 group_id = 2;
+
+  // Read-only root filesystem
+  bool read_only_root_fs = 3;
+
+  // Capabilities to drop
+  repeated string drop_capabilities = 4;
+
+  // Capabilities to add
+  repeated string add_capabilities = 5;
+
+  // Seccomp profile
+  string seccomp_profile = 6;
+
+  // AppArmor profile
+  string apparmor_profile = 7;
+
+  // SELinux context
+  string selinux_context = 8;
+
+  // Privileged mode (dangerous)
+  bool privileged = 9;
+}
+
+// Command represents an executable command
+message Command {
+  repeated string args = 1;
+  string shell = 2;
+  bool interactive = 3;
+  bool allocate_tty = 4;
+}
+
+// SandboxMetrics contains detailed metrics
+message SandboxMetrics {
+  string sandbox_id = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  ResourceUsage usage = 3;
+  repeated ProcessMetrics processes = 4;
+  NetworkMetrics network = 5;
+  DiskMetrics disk = 6;
+}
+
+// ProcessMetrics tracks process-level metrics
+message ProcessMetrics {
+  int32 pid = 1;
+  string name = 2;
+  int32 cpu_millis = 3;
+  int64 memory_bytes = 4;
+  google.protobuf.Duration cpu_time = 5;
+}
+
+// NetworkMetrics tracks network statistics
+message NetworkMetrics {
+  int64 bytes_sent = 1;
+  int64 bytes_received = 2;
+  int64 packets_sent = 3;
+  int64 packets_received = 4;
+  int32 connections_active = 5;
+}
+
+// DiskMetrics tracks disk I/O
+message DiskMetrics {
+  int64 bytes_read = 1;
+  int64 bytes_written = 2;
+  int64 reads_completed = 3;
+  int64 writes_completed = 4;
+  int64 available_bytes = 5;
+}
+
+// ConnectionInfo provides connection details
+message ConnectionInfo {
+  string host = 1;
+  int32 port = 2;
+  string protocol = 3;
+  string access_token = 4;
+  google.protobuf.Timestamp token_expires_at = 5;
+}
+
+// HealthStatus indicates sandbox health
+message HealthStatus {
+  HealthState state = 1;
+  string message = 2;
+  google.protobuf.Timestamp last_check = 3;
+  int32 consecutive_failures = 4;
+}
+
+// VolumeMount defines volume mounting
+message VolumeMount {
+  string source = 1;
+  string target = 2;
+  bool read_only = 3;
+}
+
+// PortMapping defines port forwarding
+message PortMapping {
+  int32 container_port = 1;
+  int32 host_port = 2;
+  string protocol = 3;
+}
+
+// InitScript defines initialization script
+message InitScript {
+  string name = 1;
+  string content = 2;
+  bool run_as_root = 3;
+}
+
+// Snapshot represents sandbox snapshot
+message Snapshot {
+  string snapshot_id = 1;
+  string sandbox_id = 2;
+  string name = 3;
+  string description = 4;
+  int64 size_bytes = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// FileMetadata for file transfers
+message FileMetadata {
+  string path = 1;
+  int64 size = 2;
+  int32 mode = 3;
+  google.protobuf.Timestamp modified_at = 4;
+}
+
+// LogEntry represents a log message
+message LogEntry {
+  google.protobuf.Timestamp timestamp = 1;
+  LogLevel level = 2;
+  string message = 3;
+  map<string, string> fields = 4;
+}
+
+// Enums
+
+enum RuntimeType {
+  RUNTIME_TYPE_UNSPECIFIED = 0;
+  RUNTIME_TYPE_NODE = 1;
+  RUNTIME_TYPE_PYTHON = 2;
+  RUNTIME_TYPE_DOCKER = 3;
+  RUNTIME_TYPE_WASM = 4;
+  RUNTIME_TYPE_E2B = 5;
+  RUNTIME_TYPE_CUSTOM = 6;
+}
+
+enum SandboxState {
+  SANDBOX_STATE_UNSPECIFIED = 0;
+  SANDBOX_STATE_PROVISIONING = 1;
+  SANDBOX_STATE_STARTING = 2;
+  SANDBOX_STATE_RUNNING = 3;
+  SANDBOX_STATE_STOPPING = 4;
+  SANDBOX_STATE_STOPPED = 5;
+  SANDBOX_STATE_FAILED = 6;
+  SANDBOX_STATE_TERMINATED = 7;
+}
+
+enum ExecutionStatus {
+  EXECUTION_STATUS_UNSPECIFIED = 0;
+  EXECUTION_STATUS_RUNNING = 1;
+  EXECUTION_STATUS_SUCCEEDED = 2;
+  EXECUTION_STATUS_FAILED = 3;
+  EXECUTION_STATUS_TIMEOUT = 4;
+  EXECUTION_STATUS_CANCELLED = 5;
+}
+
+enum StreamType {
+  STREAM_TYPE_UNSPECIFIED = 0;
+  STREAM_TYPE_STDOUT = 1;
+  STREAM_TYPE_STDERR = 2;
+}
+
+enum NetworkMode {
+  NETWORK_MODE_UNSPECIFIED = 0;
+  NETWORK_MODE_BRIDGE = 1;
+  NETWORK_MODE_HOST = 2;
+  NETWORK_MODE_NONE = 3;
+  NETWORK_MODE_ISOLATED = 4;
+}
+
+enum HealthState {
+  HEALTH_STATE_UNSPECIFIED = 0;
+  HEALTH_STATE_HEALTHY = 1;
+  HEALTH_STATE_DEGRADED = 2;
+  HEALTH_STATE_UNHEALTHY = 3;
+}
+
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_DEBUG = 1;
+  LOG_LEVEL_INFO = 2;
+  LOG_LEVEL_WARN = 3;
+  LOG_LEVEL_ERROR = 4;
+  LOG_LEVEL_FATAL = 5;
+}

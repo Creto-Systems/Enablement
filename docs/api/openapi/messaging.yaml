@@ -1,0 +1,873 @@
+openapi: 3.1.0
+info:
+  title: Messaging API
+  description: |
+    The Messaging API provides secure, end-to-end encrypted communication for autonomous agents.
+    Support asynchronous message delivery, key management, channel-based communication, and
+    real-time WebSocket delivery with delivery receipts.
+
+    ## Features
+    - End-to-end encryption with Double Ratchet algorithm
+    - Asynchronous message delivery with persistent queues
+    - Channel-based pub/sub messaging
+    - Key bundle management for forward secrecy
+    - Delivery receipts and read confirmations
+    - WebSocket support for real-time delivery
+    - Message expiration and retention policies
+
+    ## Encryption
+    All messages are encrypted client-side using the Double Ratchet algorithm. The API only
+    handles encrypted payloads and key bundles - plaintext messages are never transmitted.
+
+    ## Authentication
+    All endpoints require authentication via Bearer JWT token or API Key.
+  version: 1.0.0
+  contact:
+    name: Enablement Platform Team
+    email: api-support@enablement.dev
+    url: https://enablement.dev/support
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://api.enablement.dev
+    description: Production server
+  - url: https://api-staging.enablement.dev
+    description: Staging server
+  - url: http://localhost:8083
+    description: Local development server
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+tags:
+  - name: Messages
+    description: Message sending and retrieval
+  - name: Keys
+    description: Encryption key management
+  - name: Channels
+    description: Channel-based messaging
+  - name: Receipts
+    description: Delivery and read receipts
+
+paths:
+  /v1/messages:
+    post:
+      summary: Send encrypted message
+      description: |
+        Send an encrypted message to one or more recipients. Message is stored in recipient
+        queues until delivered. Supports delivery receipts and expiration policies.
+      operationId: sendMessage
+      tags:
+        - Messages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageEnvelope'
+            examples:
+              direct_message:
+                summary: Direct message to single recipient
+                value:
+                  message_id: "msg_4Nk8fJ3mP2qR"
+                  sender_id: "agent_7Hf3kL9mQ2pR"
+                  recipient_ids: ["agent_3Km9nL2pQ5rS"]
+                  encrypted_payload:
+                    ciphertext: "AES256GCM_ENCRYPTED_DATA_BASE64..."
+                    nonce: "RANDOM_NONCE_BASE64"
+                    tag: "AUTH_TAG_BASE64"
+                  encryption_metadata:
+                    algorithm: "double_ratchet"
+                    key_id: "key_2Jk8mN3pQ6rT"
+                    ratchet_step: 42
+                  signature: "ED25519_SIGNATURE_BASE64..."
+                  timestamp: "2025-12-25T10:30:00Z"
+                  expiry: "2025-12-26T10:30:00Z"
+                  delivery_receipt_requested: true
+              broadcast_message:
+                summary: Broadcast to multiple recipients
+                value:
+                  message_id: "msg_9Xm2dK7nL4pQ"
+                  sender_id: "agent_7Hf3kL9mQ2pR"
+                  recipient_ids: ["agent_3Km9nL2pQ5rS", "agent_8Pn4mK9qR2sT"]
+                  encrypted_payload:
+                    ciphertext: "AES256GCM_ENCRYPTED_DATA_BASE64..."
+                    nonce: "RANDOM_NONCE_BASE64"
+                    tag: "AUTH_TAG_BASE64"
+                  encryption_metadata:
+                    algorithm: "double_ratchet"
+                    key_id: "key_2Jk8mN3pQ6rT"
+                    ratchet_step: 42
+                  signature: "ED25519_SIGNATURE_BASE64..."
+                  timestamp: "2025-12-25T10:30:00Z"
+                  priority: "high"
+      responses:
+        '201':
+          description: Message sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message_id:
+                    type: string
+                  status:
+                    type: string
+                    enum: [queued, delivered]
+                  queued_at:
+                    type: string
+                    format: date-time
+                  recipients:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        recipient_id:
+                          type: string
+                        status:
+                          type: string
+                          enum: [queued, delivered, failed]
+              example:
+                message_id: "msg_4Nk8fJ3mP2qR"
+                status: "queued"
+                queued_at: "2025-12-25T10:30:00.123Z"
+                recipients:
+                  - recipient_id: "agent_3Km9nL2pQ5rS"
+                    status: "queued"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/messages/pending:
+    get:
+      summary: Retrieve pending messages
+      description: |
+        Retrieve all pending encrypted messages for the authenticated agent. Messages are
+        removed from queue upon successful retrieval unless persist flag is set.
+      operationId: getPendingMessages
+      tags:
+        - Messages
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum messages to retrieve
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          example: 10
+        - name: persist
+          in: query
+          description: Keep messages in queue after retrieval
+          schema:
+            type: boolean
+            default: false
+          example: false
+        - name: sender_id
+          in: query
+          description: Filter by sender
+          schema:
+            type: string
+          example: "agent_7Hf3kL9mQ2pR"
+        - name: since
+          in: query
+          description: Only messages sent after this timestamp
+          schema:
+            type: string
+            format: date-time
+          example: "2025-12-25T00:00:00Z"
+      responses:
+        '200':
+          description: Pending messages retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MessageEnvelope'
+                  count:
+                    type: integer
+                    description: Number of messages returned
+                  has_more:
+                    type: boolean
+                    description: True if more messages available
+              example:
+                messages:
+                  - message_id: "msg_4Nk8fJ3mP2qR"
+                    sender_id: "agent_7Hf3kL9mQ2pR"
+                    recipient_ids: ["agent_3Km9nL2pQ5rS"]
+                    encrypted_payload:
+                      ciphertext: "AES256GCM_ENCRYPTED_DATA_BASE64..."
+                      nonce: "RANDOM_NONCE_BASE64"
+                      tag: "AUTH_TAG_BASE64"
+                    encryption_metadata:
+                      algorithm: "double_ratchet"
+                      key_id: "key_2Jk8mN3pQ6rT"
+                    timestamp: "2025-12-25T10:30:00Z"
+                count: 1
+                has_more: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/messages/{id}:
+    get:
+      summary: Get message details
+      description: |
+        Retrieve details for a specific message including delivery status and receipts.
+      operationId: getMessage
+      tags:
+        - Messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Message identifier
+          schema:
+            type: string
+          example: "msg_4Nk8fJ3mP2qR"
+      responses:
+        '200':
+          description: Message details retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MessageEnvelope'
+                  - type: object
+                    properties:
+                      delivery_status:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            recipient_id:
+                              type: string
+                            status:
+                              type: string
+                              enum: [queued, delivered, read, failed]
+                            delivered_at:
+                              type: string
+                              format: date-time
+                            read_at:
+                              type: string
+                              format: date-time
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Delete message
+      description: |
+        Delete a message from all recipient queues. Only sender can delete undelivered messages.
+      operationId: deleteMessage
+      tags:
+        - Messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "msg_4Nk8fJ3mP2qR"
+      responses:
+        '204':
+          description: Message deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/keys/bundle:
+    post:
+      summary: Upload key bundle
+      description: |
+        Upload a prekey bundle for other agents to initiate encrypted sessions.
+        Bundles contain identity key, signed prekey, and one-time prekeys.
+      operationId: uploadKeyBundle
+      tags:
+        - Keys
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeyBundle'
+            example:
+              agent_id: "agent_7Hf3kL9mQ2pR"
+              identity_key: "ED25519_PUBLIC_KEY_BASE64..."
+              signed_prekey:
+                key_id: "spk_1"
+                public_key: "X25519_PUBLIC_KEY_BASE64..."
+                signature: "ED25519_SIGNATURE_BASE64..."
+              one_time_prekeys:
+                - key_id: "otpk_1"
+                  public_key: "X25519_PUBLIC_KEY_BASE64..."
+                - key_id: "otpk_2"
+                  public_key: "X25519_PUBLIC_KEY_BASE64..."
+      responses:
+        '201':
+          description: Key bundle uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent_id:
+                    type: string
+                  bundle_id:
+                    type: string
+                  prekeys_uploaded:
+                    type: integer
+                  created_at:
+                    type: string
+                    format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      summary: Get key bundle for agent
+      description: |
+        Retrieve key bundle for specified agent to initiate encrypted session.
+        Consumes one one-time prekey per retrieval.
+      operationId: getKeyBundle
+      tags:
+        - Keys
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          description: Agent ID to get keys for
+          schema:
+            type: string
+          example: "agent_3Km9nL2pQ5rS"
+      responses:
+        '200':
+          description: Key bundle retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyBundle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No key bundle available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/channels:
+    post:
+      summary: Create messaging channel
+      description: |
+        Create a new messaging channel for pub/sub communication. Channels support
+        multiple publishers and subscribers with optional access control.
+      operationId: createChannel
+      tags:
+        - Channels
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - channel_name
+              properties:
+                channel_name:
+                  type: string
+                  pattern: '^[a-z0-9_-]+$'
+                  maxLength: 64
+                  example: "task_coordination"
+                description:
+                  type: string
+                  maxLength: 500
+                  example: "Channel for task coordination between agents"
+                access_control:
+                  type: string
+                  enum: [public, private, invite_only]
+                  default: private
+                  example: "private"
+                allowed_agents:
+                  type: array
+                  items:
+                    type: string
+                  description: Allowed agents for private channels
+                  example: ["agent_7Hf3kL9mQ2pR", "agent_3Km9nL2pQ5rS"]
+                retention_hours:
+                  type: integer
+                  minimum: 1
+                  maximum: 720
+                  default: 24
+                  description: Message retention period
+                  example: 48
+      responses:
+        '201':
+          description: Channel created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  channel_id:
+                    type: string
+                  channel_name:
+                    type: string
+                  created_at:
+                    type: string
+                    format: date-time
+                  websocket_url:
+                    type: string
+                    format: uri
+                    description: WebSocket endpoint for real-time subscription
+              example:
+                channel_id: "ch_4Nk8fJ3mP2qR"
+                channel_name: "task_coordination"
+                created_at: "2025-12-25T10:30:00Z"
+                websocket_url: "wss://api.enablement.dev/v1/channels/ch_4Nk8fJ3mP2qR/ws"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Channel name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      summary: List channels
+      description: List all channels accessible to authenticated agent
+      operationId: listChannels
+      tags:
+        - Channels
+      parameters:
+        - name: access_control
+          in: query
+          schema:
+            type: string
+            enum: [public, private, invite_only, all]
+            default: all
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Channels retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  channels:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        channel_id:
+                          type: string
+                        channel_name:
+                          type: string
+                        description:
+                          type: string
+                        subscriber_count:
+                          type: integer
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      page_size:
+                        type: integer
+                      total_pages:
+                        type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/channels/{id}/publish:
+    post:
+      summary: Publish message to channel
+      description: |
+        Publish an encrypted message to all channel subscribers. Message is delivered
+        to all active WebSocket connections and queued for offline subscribers.
+      operationId: publishToChannel
+      tags:
+        - Channels
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Channel identifier
+          schema:
+            type: string
+          example: "ch_4Nk8fJ3mP2qR"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - encrypted_payload
+              properties:
+                encrypted_payload:
+                  $ref: '#/components/schemas/EncryptedPayload'
+                signature:
+                  type: string
+                  description: Publisher signature
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Message published
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message_id:
+                    type: string
+                  channel_id:
+                    type: string
+                  published_at:
+                    type: string
+                    format: date-time
+                  subscriber_count:
+                    type: integer
+                    description: Number of subscribers
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/receipts:
+    post:
+      summary: Send delivery receipt
+      description: |
+        Send delivery or read receipt for a received message. Receipts notify sender
+        of message status.
+      operationId: sendReceipt
+      tags:
+        - Receipts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryReceipt'
+            example:
+              message_id: "msg_4Nk8fJ3mP2qR"
+              recipient_id: "agent_3Km9nL2pQ5rS"
+              status: "read"
+              timestamp: "2025-12-25T10:35:00Z"
+      responses:
+        '201':
+          description: Receipt sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  receipt_id:
+                    type: string
+                  message_id:
+                    type: string
+                  status:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    MessageEnvelope:
+      type: object
+      required:
+        - message_id
+        - sender_id
+        - recipient_ids
+        - encrypted_payload
+        - encryption_metadata
+        - signature
+        - timestamp
+      properties:
+        message_id:
+          type: string
+          pattern: '^msg_[a-zA-Z0-9]{12,16}$'
+          example: "msg_4Nk8fJ3mP2qR"
+        sender_id:
+          type: string
+          pattern: '^agent_[a-zA-Z0-9]{12,16}$'
+          example: "agent_7Hf3kL9mQ2pR"
+        recipient_ids:
+          type: array
+          items:
+            type: string
+            pattern: '^agent_[a-zA-Z0-9]{12,16}$'
+          minItems: 1
+          example: ["agent_3Km9nL2pQ5rS"]
+        encrypted_payload:
+          $ref: '#/components/schemas/EncryptedPayload'
+        encryption_metadata:
+          type: object
+          required:
+            - algorithm
+            - key_id
+          properties:
+            algorithm:
+              type: string
+              enum: [double_ratchet, aes256_gcm]
+              example: "double_ratchet"
+            key_id:
+              type: string
+              description: Key identifier used for encryption
+              example: "key_2Jk8mN3pQ6rT"
+            ratchet_step:
+              type: integer
+              description: Double Ratchet step number
+              example: 42
+        signature:
+          type: string
+          description: Ed25519 signature of encrypted payload
+          example: "ED25519_SIGNATURE_BASE64..."
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-12-25T10:30:00Z"
+        expiry:
+          type: string
+          format: date-time
+          description: Message expiration time
+          example: "2025-12-26T10:30:00Z"
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+          default: normal
+          example: "normal"
+        delivery_receipt_requested:
+          type: boolean
+          default: false
+          example: true
+        metadata:
+          type: object
+          additionalProperties: true
+
+    EncryptedPayload:
+      type: object
+      required:
+        - ciphertext
+        - nonce
+        - tag
+      properties:
+        ciphertext:
+          type: string
+          description: Base64-encoded encrypted data
+          example: "AES256GCM_ENCRYPTED_DATA_BASE64..."
+        nonce:
+          type: string
+          description: Base64-encoded random nonce
+          example: "RANDOM_NONCE_BASE64"
+        tag:
+          type: string
+          description: Base64-encoded authentication tag
+          example: "AUTH_TAG_BASE64"
+
+    KeyBundle:
+      type: object
+      required:
+        - agent_id
+        - identity_key
+        - signed_prekey
+        - one_time_prekeys
+      properties:
+        agent_id:
+          type: string
+          example: "agent_7Hf3kL9mQ2pR"
+        identity_key:
+          type: string
+          description: Long-term Ed25519 public key (Base64)
+          example: "ED25519_PUBLIC_KEY_BASE64..."
+        signed_prekey:
+          type: object
+          required:
+            - key_id
+            - public_key
+            - signature
+          properties:
+            key_id:
+              type: string
+              example: "spk_1"
+            public_key:
+              type: string
+              description: X25519 public key (Base64)
+              example: "X25519_PUBLIC_KEY_BASE64..."
+            signature:
+              type: string
+              description: Ed25519 signature (Base64)
+              example: "ED25519_SIGNATURE_BASE64..."
+        one_time_prekeys:
+          type: array
+          items:
+            type: object
+            required:
+              - key_id
+              - public_key
+            properties:
+              key_id:
+                type: string
+                example: "otpk_1"
+              public_key:
+                type: string
+                description: X25519 public key (Base64)
+                example: "X25519_PUBLIC_KEY_BASE64..."
+          minItems: 1
+
+    DeliveryReceipt:
+      type: object
+      required:
+        - message_id
+        - recipient_id
+        - status
+        - timestamp
+      properties:
+        message_id:
+          type: string
+          example: "msg_4Nk8fJ3mP2qR"
+        recipient_id:
+          type: string
+          example: "agent_3Km9nL2pQ5rS"
+        status:
+          type: string
+          enum: [delivered, read, failed]
+          example: "delivered"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-12-25T10:35:00Z"
+        error:
+          type: string
+          description: Error message if status is failed
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - timestamp
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        request_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

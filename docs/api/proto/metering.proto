@@ -1,0 +1,455 @@
+// Copyright 2025 Creto
+// Licensed under the Apache License, Version 2.0
+
+// Metering Service API Specification
+// Issue #51: Metering Service Integration
+//
+// This service handles usage tracking, billing events, and quota management
+// for AI agents and autonomous systems.
+
+syntax = "proto3";
+
+package creto.metering.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/creto/enablement/gen/go/metering/v1;meteringv1";
+option java_multiple_files = true;
+option java_package = "io.creto.metering.v1";
+option java_outer_classname = "MeteringProto";
+
+// MeteringService provides comprehensive usage tracking and quota management
+// for AI agents, autonomous systems, and their associated resources.
+service MeteringService {
+  // IngestEvent records a single billable event
+  // Rate limit: 1000 requests/second per tenant
+  rpc IngestEvent(IngestEventRequest) returns (IngestEventResponse) {}
+
+  // IngestEventBatch records multiple billable events atomically
+  // Maximum batch size: 1000 events
+  // Rate limit: 100 requests/second per tenant
+  rpc IngestEventBatch(IngestEventBatchRequest) returns (IngestEventBatchResponse) {}
+
+  // GetUsage retrieves aggregated usage metrics for a given time range
+  // Maximum time range: 90 days
+  rpc GetUsage(GetUsageRequest) returns (GetUsageResponse) {}
+
+  // GetQuota retrieves current quota status and limits
+  rpc GetQuota(GetQuotaRequest) returns (GetQuotaResponse) {}
+
+  // CheckQuota verifies if an operation is within quota limits
+  // This is a fast-path check for pre-flight validation
+  rpc CheckQuota(CheckQuotaRequest) returns (CheckQuotaResponse) {}
+
+  // StreamUsage provides real-time usage metrics via server-side streaming
+  rpc StreamUsage(StreamUsageRequest) returns (stream UsageUpdate) {}
+
+  // SetQuota updates quota limits for a tenant or agent
+  // Requires admin permissions
+  rpc SetQuota(SetQuotaRequest) returns (SetQuotaResponse) {}
+
+  // GetBillingReport generates detailed billing reports
+  rpc GetBillingReport(GetBillingReportRequest) returns (BillingReport) {}
+}
+
+// IngestEventRequest submits a single billable event
+message IngestEventRequest {
+  // Unique identifier for idempotency (UUID recommended)
+  string event_id = 1;
+
+  // Agent or system identifier
+  AgentIdentity agent = 2;
+
+  // Tenant/organization identifier
+  string tenant_id = 3;
+
+  // The billable event details
+  BillableEvent event = 4;
+
+  // Optional metadata for event enrichment
+  map<string, string> metadata = 5;
+
+  // Timestamp of event occurrence (defaults to ingestion time if not provided)
+  google.protobuf.Timestamp event_time = 6;
+}
+
+// IngestEventResponse confirms event ingestion
+message IngestEventResponse {
+  // Server-assigned event ID
+  string event_id = 1;
+
+  // Confirmation timestamp
+  google.protobuf.Timestamp ingested_at = 2;
+
+  // Current quota status after ingestion
+  QuotaStatus quota_status = 3;
+
+  // Whether the event triggered any quota warnings
+  repeated QuotaWarning warnings = 4;
+}
+
+// IngestEventBatchRequest submits multiple events atomically
+message IngestEventBatchRequest {
+  // Batch identifier for tracking
+  string batch_id = 1;
+
+  // Tenant identifier (must be same for all events in batch)
+  string tenant_id = 2;
+
+  // Collection of events to ingest
+  repeated EventEntry events = 3;
+
+  // Batch-level metadata
+  map<string, string> metadata = 4;
+
+  message EventEntry {
+    string event_id = 1;
+    AgentIdentity agent = 2;
+    BillableEvent event = 3;
+    google.protobuf.Timestamp event_time = 4;
+  }
+}
+
+// IngestEventBatchResponse provides batch ingestion results
+message IngestEventBatchResponse {
+  string batch_id = 1;
+  int32 total_events = 2;
+  int32 successful_events = 3;
+  int32 failed_events = 4;
+  repeated EventResult results = 5;
+  google.protobuf.Timestamp processed_at = 6;
+
+  message EventResult {
+    string event_id = 1;
+    bool success = 2;
+    string error_message = 3;
+    QuotaStatus quota_status = 4;
+  }
+}
+
+// GetUsageRequest retrieves usage metrics
+message GetUsageRequest {
+  // Tenant identifier
+  string tenant_id = 1;
+
+  // Optional agent filter
+  AgentIdentity agent = 2;
+
+  // Time range for usage query
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+
+  // Aggregation granularity
+  AggregationPeriod granularity = 5;
+
+  // Filter by event types
+  repeated EventType event_types = 6;
+
+  // Pagination
+  int32 page_size = 7;
+  string page_token = 8;
+}
+
+// GetUsageResponse returns aggregated usage data
+message GetUsageResponse {
+  // Usage summaries grouped by granularity
+  repeated UsageSummary summaries = 1;
+
+  // Total usage across all periods
+  UsageSummary total = 2;
+
+  // Next page token for pagination
+  string next_page_token = 3;
+
+  // Current quota status
+  QuotaStatus quota_status = 4;
+}
+
+// GetQuotaRequest retrieves quota information
+message GetQuotaRequest {
+  string tenant_id = 1;
+  AgentIdentity agent = 2;
+  repeated QuotaType quota_types = 3;
+}
+
+// GetQuotaResponse returns quota limits and usage
+message GetQuotaResponse {
+  repeated QuotaStatus quotas = 1;
+  google.protobuf.Timestamp as_of = 2;
+}
+
+// CheckQuotaRequest validates quota availability
+message CheckQuotaRequest {
+  string tenant_id = 1;
+  AgentIdentity agent = 2;
+  EventType event_type = 3;
+  int64 requested_amount = 4;
+}
+
+// CheckQuotaResponse indicates quota check result
+message CheckQuotaResponse {
+  bool allowed = 1;
+  QuotaStatus current_status = 2;
+  string denial_reason = 3;
+  google.protobuf.Timestamp retry_after = 4;
+}
+
+// StreamUsageRequest initiates usage streaming
+message StreamUsageRequest {
+  string tenant_id = 1;
+  AgentIdentity agent = 2;
+  AggregationPeriod update_interval = 3;
+}
+
+// UsageUpdate provides real-time usage updates
+message UsageUpdate {
+  google.protobuf.Timestamp timestamp = 1;
+  UsageSummary summary = 2;
+  QuotaStatus quota_status = 3;
+}
+
+// SetQuotaRequest updates quota limits
+message SetQuotaRequest {
+  string tenant_id = 1;
+  AgentIdentity agent = 2;
+  repeated QuotaLimit limits = 3;
+  string reason = 4;
+}
+
+// SetQuotaResponse confirms quota update
+message SetQuotaResponse {
+  repeated QuotaStatus updated_quotas = 1;
+  google.protobuf.Timestamp effective_at = 2;
+}
+
+// GetBillingReportRequest generates billing reports
+message GetBillingReportRequest {
+  string tenant_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  ReportFormat format = 4;
+  bool include_details = 5;
+}
+
+// BillingReport contains comprehensive billing data
+message BillingReport {
+  string report_id = 1;
+  string tenant_id = 2;
+  google.protobuf.Timestamp start_time = 3;
+  google.protobuf.Timestamp end_time = 4;
+  repeated LineItem line_items = 5;
+  CostSummary summary = 6;
+  google.protobuf.Timestamp generated_at = 7;
+
+  message LineItem {
+    EventType event_type = 1;
+    int64 quantity = 2;
+    double unit_price = 3;
+    double total_cost = 4;
+    string description = 5;
+  }
+}
+
+// AgentIdentity uniquely identifies an agent or system
+message AgentIdentity {
+  // Unique agent identifier
+  string agent_id = 1;
+
+  // Agent type classification
+  AgentType agent_type = 2;
+
+  // Optional agent name for display
+  string agent_name = 3;
+
+  // Agent version or revision
+  string version = 4;
+}
+
+// BillableEvent represents a single metered event
+message BillableEvent {
+  // Type of billable event
+  EventType event_type = 1;
+
+  // Quantity or amount (tokens, compute seconds, API calls, etc.)
+  int64 quantity = 2;
+
+  // Unit of measurement
+  string unit = 3;
+
+  // Resource details
+  ResourceUsage resource_usage = 4;
+
+  // Cost information (optional)
+  CostInfo cost = 5;
+
+  // Event-specific attributes
+  map<string, string> attributes = 6;
+}
+
+// ResourceUsage tracks resource consumption
+message ResourceUsage {
+  // CPU time in milliseconds
+  int64 cpu_millis = 1;
+
+  // Memory usage in bytes
+  int64 memory_bytes = 2;
+
+  // Network egress in bytes
+  int64 network_egress_bytes = 3;
+
+  // Network ingress in bytes
+  int64 network_ingress_bytes = 4;
+
+  // Storage usage in bytes
+  int64 storage_bytes = 5;
+
+  // GPU time in milliseconds
+  int64 gpu_millis = 6;
+
+  // Duration of operation
+  google.protobuf.Duration duration = 7;
+}
+
+// UsageSummary aggregates usage metrics
+message UsageSummary {
+  // Time period for this summary
+  google.protobuf.Timestamp period_start = 1;
+  google.protobuf.Timestamp period_end = 2;
+
+  // Usage by event type
+  map<string, int64> usage_by_type = 3;
+
+  // Total resource consumption
+  ResourceUsage total_resources = 4;
+
+  // Total cost
+  CostSummary cost = 5;
+
+  // Number of unique agents
+  int32 unique_agents = 6;
+
+  // Total event count
+  int64 total_events = 7;
+}
+
+// QuotaStatus represents current quota state
+message QuotaStatus {
+  QuotaType quota_type = 1;
+  int64 limit = 2;
+  int64 used = 3;
+  int64 remaining = 4;
+  double utilization_percent = 5;
+  google.protobuf.Timestamp reset_at = 6;
+  QuotaState state = 7;
+}
+
+// QuotaLimit defines a quota constraint
+message QuotaLimit {
+  QuotaType quota_type = 1;
+  int64 limit = 2;
+  google.protobuf.Duration period = 3;
+}
+
+// QuotaWarning indicates approaching quota limits
+message QuotaWarning {
+  QuotaType quota_type = 1;
+  double utilization_percent = 2;
+  string message = 3;
+  WarningSeverity severity = 4;
+}
+
+// CostInfo tracks financial costs
+message CostInfo {
+  double amount = 1;
+  string currency = 2;
+  PricingModel pricing_model = 3;
+}
+
+// CostSummary aggregates costs
+message CostSummary {
+  double total_cost = 1;
+  string currency = 2;
+  map<string, double> cost_by_type = 3;
+  double estimated_monthly_cost = 4;
+}
+
+// EventType enumeration
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  EVENT_TYPE_LLM_PROMPT = 1;
+  EVENT_TYPE_LLM_COMPLETION = 2;
+  EVENT_TYPE_SANDBOX_RUNTIME = 3;
+  EVENT_TYPE_API_CALL = 4;
+  EVENT_TYPE_STORAGE_OPERATION = 5;
+  EVENT_TYPE_NETWORK_TRANSFER = 6;
+  EVENT_TYPE_COMPUTE_TIME = 7;
+  EVENT_TYPE_TOOL_EXECUTION = 8;
+  EVENT_TYPE_AGENT_SPAWN = 9;
+  EVENT_TYPE_MESSAGE_DELIVERY = 10;
+}
+
+// AgentType classification
+enum AgentType {
+  AGENT_TYPE_UNSPECIFIED = 0;
+  AGENT_TYPE_AUTONOMOUS = 1;
+  AGENT_TYPE_ASSISTED = 2;
+  AGENT_TYPE_HUMAN_IN_LOOP = 3;
+  AGENT_TYPE_SYSTEM = 4;
+}
+
+// QuotaType enumeration
+enum QuotaType {
+  QUOTA_TYPE_UNSPECIFIED = 0;
+  QUOTA_TYPE_TOKENS = 1;
+  QUOTA_TYPE_API_CALLS = 2;
+  QUOTA_TYPE_COMPUTE_SECONDS = 3;
+  QUOTA_TYPE_STORAGE_GB = 4;
+  QUOTA_TYPE_NETWORK_GB = 5;
+  QUOTA_TYPE_CONCURRENT_AGENTS = 6;
+  QUOTA_TYPE_COST_USD = 7;
+}
+
+// QuotaState indicates quota health
+enum QuotaState {
+  QUOTA_STATE_UNSPECIFIED = 0;
+  QUOTA_STATE_HEALTHY = 1;
+  QUOTA_STATE_WARNING = 2;
+  QUOTA_STATE_CRITICAL = 3;
+  QUOTA_STATE_EXCEEDED = 4;
+}
+
+// AggregationPeriod for usage summaries
+enum AggregationPeriod {
+  AGGREGATION_PERIOD_UNSPECIFIED = 0;
+  AGGREGATION_PERIOD_MINUTE = 1;
+  AGGREGATION_PERIOD_HOUR = 2;
+  AGGREGATION_PERIOD_DAY = 3;
+  AGGREGATION_PERIOD_WEEK = 4;
+  AGGREGATION_PERIOD_MONTH = 5;
+}
+
+// WarningSeverity levels
+enum WarningSeverity {
+  WARNING_SEVERITY_UNSPECIFIED = 0;
+  WARNING_SEVERITY_INFO = 1;
+  WARNING_SEVERITY_WARNING = 2;
+  WARNING_SEVERITY_CRITICAL = 3;
+}
+
+// PricingModel types
+enum PricingModel {
+  PRICING_MODEL_UNSPECIFIED = 0;
+  PRICING_MODEL_PAY_AS_YOU_GO = 1;
+  PRICING_MODEL_SUBSCRIPTION = 2;
+  PRICING_MODEL_RESERVED = 3;
+  PRICING_MODEL_SPOT = 4;
+}
+
+// ReportFormat for billing reports
+enum ReportFormat {
+  REPORT_FORMAT_UNSPECIFIED = 0;
+  REPORT_FORMAT_JSON = 1;
+  REPORT_FORMAT_CSV = 2;
+  REPORT_FORMAT_PDF = 3;
+}

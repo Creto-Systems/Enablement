@@ -1,0 +1,836 @@
+openapi: 3.1.0
+info:
+  title: Runtime API
+  description: |
+    The Runtime API provides secure code execution environments (sandboxes) for autonomous agents.
+    Support multiple isolation technologies (gVisor, Kata Containers), resource management,
+    sandbox pooling, and execution monitoring.
+
+    ## Features
+    - Multi-tenant sandbox isolation with gVisor and Kata Containers
+    - Resource limits (CPU, memory, disk, network)
+    - Pre-warmed sandbox pools for low-latency execution
+    - Template-based sandbox creation
+    - Code execution with stdin/stdout/stderr capture
+    - Real-time resource monitoring
+    - Automatic cleanup and lifecycle management
+
+    ## Isolation Levels
+    - **STANDARD**: gVisor-based isolation, fast startup (<100ms)
+    - **HIGH_SECURITY**: Kata Containers, VM-level isolation (<2s startup)
+
+    ## Authentication
+    All endpoints require authentication via Bearer JWT token or API Key.
+  version: 1.0.0
+  contact:
+    name: Enablement Platform Team
+    email: api-support@enablement.dev
+    url: https://enablement.dev/support
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://api.enablement.dev
+    description: Production server
+  - url: https://api-staging.enablement.dev
+    description: Staging server
+  - url: http://localhost:8082
+    description: Local development server
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+tags:
+  - name: Sandboxes
+    description: Sandbox lifecycle management
+  - name: Execution
+    description: Code execution in sandboxes
+  - name: Pools
+    description: Sandbox pool management
+  - name: Monitoring
+    description: Resource monitoring and metrics
+
+paths:
+  /v1/sandboxes:
+    post:
+      summary: Create sandbox
+      description: |
+        Create a new isolated execution environment. Sandboxes are created from templates
+        and support custom resource limits. Creation time varies by isolation level:
+        STANDARD (<100ms), HIGH_SECURITY (<2s).
+      operationId: createSandbox
+      tags:
+        - Sandboxes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SandboxSpec'
+            examples:
+              standard_python:
+                summary: Standard Python sandbox
+                value:
+                  template: "python3.11"
+                  runtime_type: "GVISOR"
+                  isolation_level: "STANDARD"
+                  resource_limits:
+                    cpu_cores: 1
+                    memory_mb: 512
+                    disk_mb: 1024
+                    timeout_seconds: 300
+                  environment:
+                    PYTHONPATH: "/app:/app/lib"
+                    LOG_LEVEL: "INFO"
+                  metadata:
+                    agent_id: "agent_7Hf3kL9mQ2pR"
+                    purpose: "data_processing"
+              high_security_node:
+                summary: High security Node.js sandbox
+                value:
+                  template: "nodejs20"
+                  runtime_type: "KATA"
+                  isolation_level: "HIGH_SECURITY"
+                  resource_limits:
+                    cpu_cores: 2
+                    memory_mb: 2048
+                    disk_mb: 4096
+                    timeout_seconds: 600
+                    network_egress_mb: 100
+                  environment:
+                    NODE_ENV: "production"
+                  metadata:
+                    compliance: "pci-dss"
+      responses:
+        '201':
+          description: Sandbox created successfully
+          headers:
+            Location:
+              description: URL of created sandbox
+              schema:
+                type: string
+                example: "/v1/sandboxes/sb_4Nk8fJ3mP2qR"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sandbox'
+              example:
+                sandbox_id: "sb_4Nk8fJ3mP2qR"
+                state: "READY"
+                runtime_type: "GVISOR"
+                template: "python3.11"
+                created_at: "2025-12-25T10:30:00Z"
+                endpoint: "wss://runtime.enablement.dev/exec/sb_4Nk8fJ3mP2qR"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    get:
+      summary: List sandboxes
+      description: |
+        Retrieve list of sandboxes with filtering by state, runtime type, or agent.
+        Results are paginated and sorted by creation time.
+      operationId: listSandboxes
+      tags:
+        - Sandboxes
+      parameters:
+        - name: state
+          in: query
+          description: Filter by sandbox state
+          schema:
+            type: string
+            enum: [CREATING, READY, RUNNING, STOPPED, TERMINATED, ALL]
+            default: ALL
+          example: "READY"
+        - name: runtime_type
+          in: query
+          description: Filter by runtime type
+          schema:
+            type: string
+            enum: [GVISOR, KATA]
+          example: "GVISOR"
+        - name: agent_id
+          in: query
+          description: Filter by agent ID (from metadata)
+          schema:
+            type: string
+          example: "agent_7Hf3kL9mQ2pR"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Sandboxes retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sandboxes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Sandbox'
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      page_size:
+                        type: integer
+                      total_pages:
+                        type: integer
+                      total_items:
+                        type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/sandboxes/{id}:
+    get:
+      summary: Get sandbox details
+      description: |
+        Retrieve complete details for a specific sandbox including current state,
+        resource usage, and execution history.
+      operationId: getSandbox
+      tags:
+        - Sandboxes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Sandbox identifier
+          schema:
+            type: string
+          example: "sb_4Nk8fJ3mP2qR"
+      responses:
+        '200':
+          description: Sandbox details retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Sandbox'
+                  - type: object
+                    properties:
+                      resource_usage:
+                        $ref: '#/components/schemas/ResourceUsage'
+                      execution_count:
+                        type: integer
+                        description: Number of executions performed
+                        example: 47
+              example:
+                sandbox_id: "sb_4Nk8fJ3mP2qR"
+                state: "READY"
+                runtime_type: "GVISOR"
+                template: "python3.11"
+                created_at: "2025-12-25T10:30:00Z"
+                resource_usage:
+                  cpu_percent: 5.2
+                  memory_mb: 128
+                  disk_mb: 45
+                  network_egress_mb: 12
+                execution_count: 47
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Delete sandbox
+      description: |
+        Terminate and delete a sandbox. Stops any running executions and releases resources.
+        Cannot be undone.
+      operationId: deleteSandbox
+      tags:
+        - Sandboxes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Sandbox identifier
+          schema:
+            type: string
+          example: "sb_4Nk8fJ3mP2qR"
+      responses:
+        '204':
+          description: Sandbox deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/sandboxes/{id}/exec:
+    post:
+      summary: Execute code in sandbox
+      description: |
+        Execute code or commands in an existing sandbox. Supports stdin input and
+        captures stdout/stderr output. Execution respects sandbox resource limits.
+      operationId: executeCode
+      tags:
+        - Execution
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Sandbox identifier
+          schema:
+            type: string
+          example: "sb_4Nk8fJ3mP2qR"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - command
+              properties:
+                command:
+                  type: array
+                  description: Command and arguments to execute
+                  items:
+                    type: string
+                  minItems: 1
+                  example: ["python", "-c", "print('Hello, World!')"]
+                stdin:
+                  type: string
+                  description: Input to provide via stdin
+                  example: "input data\n"
+                environment:
+                  type: object
+                  description: Additional environment variables for this execution
+                  additionalProperties:
+                    type: string
+                  example:
+                    DEBUG: "true"
+                working_dir:
+                  type: string
+                  description: Working directory for execution
+                  example: "/app"
+                timeout_seconds:
+                  type: integer
+                  description: Execution timeout (overrides sandbox default)
+                  minimum: 1
+                  maximum: 3600
+                  example: 30
+            examples:
+              python_script:
+                summary: Execute Python script
+                value:
+                  command: ["python", "/app/process.py"]
+                  stdin: '{"records": [1, 2, 3]}'
+                  environment:
+                    LOG_LEVEL: "DEBUG"
+                  timeout_seconds: 60
+              shell_command:
+                summary: Execute shell command
+                value:
+                  command: ["/bin/bash", "-c", "ls -la /app && cat /app/data.json"]
+                  working_dir: "/app"
+                  timeout_seconds: 10
+      responses:
+        '200':
+          description: Execution completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResult'
+              example:
+                execution_id: "exec_2Nk8fJ3mP2qR"
+                exit_code: 0
+                stdout: "Hello, World!\n"
+                stderr: ""
+                execution_time_ms: 45
+                resource_usage:
+                  cpu_percent: 12.5
+                  memory_mb: 87
+                  disk_mb: 2
+                  network_egress_mb: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '408':
+          description: Execution timeout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResult'
+              example:
+                execution_id: "exec_2Nk8fJ3mP2qR"
+                exit_code: 124
+                stdout: "Partial output..."
+                stderr: "Execution timed out after 30 seconds"
+                execution_time_ms: 30000
+                timeout: true
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/sandboxes/{id}/stop:
+    post:
+      summary: Stop sandbox
+      description: |
+        Stop a running sandbox without deleting it. Terminates any running executions.
+        Sandbox can be restarted later.
+      operationId: stopSandbox
+      tags:
+        - Sandboxes
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "sb_4Nk8fJ3mP2qR"
+      responses:
+        '200':
+          description: Sandbox stopped
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sandbox_id:
+                    type: string
+                  state:
+                    type: string
+                    enum: [STOPPED]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/pools/{template}/claim:
+    post:
+      summary: Claim sandbox from pool
+      description: |
+        Claim a pre-warmed sandbox from the pool for the specified template. Provides
+        near-instant sandbox availability. If pool is empty, creates new sandbox.
+      operationId: claimPooledSandbox
+      tags:
+        - Pools
+      parameters:
+        - name: template
+          in: path
+          required: true
+          description: Sandbox template name
+          schema:
+            type: string
+          example: "python3.11"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resource_limits:
+                  $ref: '#/components/schemas/ResourceLimits'
+                environment:
+                  type: object
+                  additionalProperties:
+                    type: string
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Sandbox claimed from pool
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Sandbox'
+                  - type: object
+                    properties:
+                      from_pool:
+                        type: boolean
+                        example: true
+                      claim_time_ms:
+                        type: integer
+                        description: Time to claim sandbox
+                        example: 15
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Template not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/pools/{template}:
+    get:
+      summary: Get pool status
+      description: Get status and metrics for a sandbox pool
+      operationId: getPoolStatus
+      tags:
+        - Pools
+      parameters:
+        - name: template
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "python3.11"
+      responses:
+        '200':
+          description: Pool status retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  template:
+                    type: string
+                  available:
+                    type: integer
+                    description: Number of available sandboxes
+                  claimed:
+                    type: integer
+                    description: Number of claimed sandboxes
+                  total:
+                    type: integer
+                  target_size:
+                    type: integer
+                    description: Target pool size
+                  metrics:
+                    type: object
+                    properties:
+                      avg_claim_time_ms:
+                        type: number
+                      claims_per_minute:
+                        type: number
+                      pool_hit_rate:
+                        type: number
+              example:
+                template: "python3.11"
+                available: 8
+                claimed: 12
+                total: 20
+                target_size: 10
+                metrics:
+                  avg_claim_time_ms: 18.5
+                  claims_per_minute: 45
+                  pool_hit_rate: 0.95
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/sandboxes/{id}/metrics:
+    get:
+      summary: Get sandbox metrics
+      description: |
+        Retrieve real-time and historical resource usage metrics for a sandbox.
+      operationId: getSandboxMetrics
+      tags:
+        - Monitoring
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "sb_4Nk8fJ3mP2qR"
+        - name: period
+          in: query
+          description: Metrics time period
+          schema:
+            type: string
+            enum: [realtime, 1h, 24h, 7d]
+            default: realtime
+      responses:
+        '200':
+          description: Metrics retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sandbox_id:
+                    type: string
+                  period:
+                    type: string
+                  current:
+                    $ref: '#/components/schemas/ResourceUsage'
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        timestamp:
+                          type: string
+                          format: date-time
+                        metrics:
+                          $ref: '#/components/schemas/ResourceUsage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    Sandbox:
+      type: object
+      required:
+        - sandbox_id
+        - state
+        - runtime_type
+        - template
+        - created_at
+      properties:
+        sandbox_id:
+          type: string
+          pattern: '^sb_[a-zA-Z0-9]{12,16}$'
+          example: "sb_4Nk8fJ3mP2qR"
+        state:
+          type: string
+          enum: [CREATING, READY, RUNNING, STOPPED, TERMINATED]
+          example: "READY"
+        runtime_type:
+          type: string
+          enum: [GVISOR, KATA]
+          example: "GVISOR"
+        isolation_level:
+          type: string
+          enum: [STANDARD, HIGH_SECURITY]
+          example: "STANDARD"
+        template:
+          type: string
+          example: "python3.11"
+        resource_limits:
+          $ref: '#/components/schemas/ResourceLimits'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        endpoint:
+          type: string
+          format: uri
+          description: WebSocket endpoint for interactive execution
+          example: "wss://runtime.enablement.dev/exec/sb_4Nk8fJ3mP2qR"
+        metadata:
+          type: object
+          additionalProperties: true
+
+    SandboxSpec:
+      type: object
+      required:
+        - template
+      properties:
+        template:
+          type: string
+          description: Sandbox template (python3.11, nodejs20, etc.)
+          example: "python3.11"
+        runtime_type:
+          type: string
+          enum: [GVISOR, KATA]
+          default: GVISOR
+          example: "GVISOR"
+        isolation_level:
+          type: string
+          enum: [STANDARD, HIGH_SECURITY]
+          default: STANDARD
+          example: "STANDARD"
+        resource_limits:
+          $ref: '#/components/schemas/ResourceLimits'
+        environment:
+          type: object
+          description: Environment variables
+          additionalProperties:
+            type: string
+          example:
+            PYTHONPATH: "/app"
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ResourceLimits:
+      type: object
+      properties:
+        cpu_cores:
+          type: number
+          minimum: 0.1
+          maximum: 16
+          default: 1
+          example: 1
+        memory_mb:
+          type: integer
+          minimum: 128
+          maximum: 32768
+          default: 512
+          example: 512
+        disk_mb:
+          type: integer
+          minimum: 100
+          maximum: 102400
+          default: 1024
+          example: 1024
+        network_egress_mb:
+          type: integer
+          minimum: 0
+          description: Max network egress (0 = unlimited)
+          example: 100
+        timeout_seconds:
+          type: integer
+          minimum: 1
+          maximum: 3600
+          default: 300
+          example: 300
+
+    ExecutionResult:
+      type: object
+      required:
+        - execution_id
+        - exit_code
+        - stdout
+        - stderr
+        - execution_time_ms
+      properties:
+        execution_id:
+          type: string
+          pattern: '^exec_[a-zA-Z0-9]{12,16}$'
+          example: "exec_2Nk8fJ3mP2qR"
+        exit_code:
+          type: integer
+          description: Process exit code
+          example: 0
+        stdout:
+          type: string
+          description: Standard output
+          example: "Hello, World!\n"
+        stderr:
+          type: string
+          description: Standard error
+          example: ""
+        execution_time_ms:
+          type: integer
+          description: Execution duration in milliseconds
+          example: 45
+        timeout:
+          type: boolean
+          description: True if execution timed out
+          default: false
+        resource_usage:
+          $ref: '#/components/schemas/ResourceUsage'
+
+    ResourceUsage:
+      type: object
+      properties:
+        cpu_percent:
+          type: number
+          description: CPU utilization percentage
+          example: 12.5
+        memory_mb:
+          type: number
+          description: Memory usage in MB
+          example: 87
+        disk_mb:
+          type: number
+          description: Disk usage in MB
+          example: 45
+        network_egress_mb:
+          type: number
+          description: Network egress in MB
+          example: 12
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - timestamp
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        request_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

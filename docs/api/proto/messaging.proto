@@ -1,0 +1,616 @@
+// Copyright 2025 Creto
+// Licensed under the Apache License, Version 2.0
+
+// Messaging Service API Specification
+// Issue #54: Messaging Service Integration
+//
+// This service provides secure, end-to-end encrypted messaging
+// for autonomous agent communication with delivery guarantees.
+
+syntax = "proto3";
+
+package creto.messaging.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/any.proto";
+
+option go_package = "github.com/creto/enablement/gen/go/messaging/v1;messagingv1";
+option java_multiple_files = true;
+option java_package = "io.creto.messaging.v1";
+option java_outer_classname = "MessagingProto";
+
+// MessagingService provides secure, end-to-end encrypted messaging
+// between autonomous agents with delivery guarantees and offline support.
+service MessagingService {
+  // SendMessage sends an encrypted message to one or more recipients
+  // Rate limit: 100 requests/second per sender
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {}
+
+  // ReceiveMessages streams incoming messages for an agent
+  // Long-lived connection with automatic reconnection
+  rpc ReceiveMessages(ReceiveMessagesRequest) returns (stream MessageEnvelope) {}
+
+  // PollMessages polls for new messages (alternative to streaming)
+  rpc PollMessages(PollMessagesRequest) returns (PollMessagesResponse) {}
+
+  // AcknowledgeDelivery confirms message delivery
+  // Required for at-least-once delivery semantics
+  rpc AcknowledgeDelivery(AckDeliveryRequest) returns (AckDeliveryResponse) {}
+
+  // UploadKeyBundle uploads cryptographic keys for E2EE
+  rpc UploadKeyBundle(UploadKeyBundleRequest) returns (UploadKeyBundleResponse) {}
+
+  // FetchKeyBundle retrieves public keys for encryption
+  rpc FetchKeyBundle(FetchKeyBundleRequest) returns (KeyBundle) {}
+
+  // CreateChannel creates a multi-party communication channel
+  rpc CreateChannel(CreateChannelRequest) returns (Channel) {}
+
+  // JoinChannel adds agent to an existing channel
+  rpc JoinChannel(JoinChannelRequest) returns (JoinChannelResponse) {}
+
+  // LeaveChannel removes agent from a channel
+  rpc LeaveChannel(LeaveChannelRequest) returns (LeaveChannelResponse) {}
+
+  // ListChannels retrieves channels for an agent
+  rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse) {}
+
+  // GetMessageStatus retrieves delivery status
+  rpc GetMessageStatus(GetMessageStatusRequest) returns (MessageStatus) {}
+
+  // SearchMessages searches message history
+  rpc SearchMessages(SearchMessagesRequest) returns (SearchMessagesResponse) {}
+
+  // DeleteMessage deletes a message
+  rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse) {}
+
+  // UpdateMessage edits a sent message
+  rpc UpdateMessage(UpdateMessageRequest) returns (MessageEnvelope) {}
+
+  // AddReaction adds a reaction to a message
+  rpc AddReaction(AddReactionRequest) returns (AddReactionResponse) {}
+
+  // StreamPresence streams agent presence updates
+  rpc StreamPresence(StreamPresenceRequest) returns (stream PresenceUpdate) {}
+
+  // UpdatePresence updates agent availability status
+  rpc UpdatePresence(UpdatePresenceRequest) returns (UpdatePresenceResponse) {}
+}
+
+// SendMessageRequest sends a message
+message SendMessageRequest {
+  // Sender agent identifier
+  string sender_id = 1;
+
+  // Recipient agent identifiers
+  repeated string recipient_ids = 2;
+
+  // Encrypted message payload
+  EncryptedPayload payload = 3;
+
+  // Optional channel for group messaging
+  string channel_id = 4;
+
+  // Message metadata
+  MessageMetadata metadata = 5;
+
+  // Delivery options
+  DeliveryOptions delivery = 6;
+
+  // Message priority
+  Priority priority = 7;
+
+  // Expires after duration
+  google.protobuf.Duration ttl = 8;
+
+  // Reply-to message ID
+  string reply_to = 9;
+}
+
+// SendMessageResponse confirms message sending
+message SendMessageResponse {
+  // Server-assigned message ID
+  string message_id = 1;
+
+  // Timestamp message was accepted
+  google.protobuf.Timestamp sent_at = 2;
+
+  // Per-recipient delivery status
+  repeated RecipientStatus recipient_status = 3;
+
+  // Encryption verification
+  EncryptionStatus encryption_status = 4;
+}
+
+// ReceiveMessagesRequest initiates message streaming
+message ReceiveMessagesRequest {
+  // Agent receiving messages
+  string agent_id = 1;
+
+  // Filter by channel IDs
+  repeated string channel_ids = 2;
+
+  // Filter by sender IDs
+  repeated string sender_ids = 3;
+
+  // Only receive messages after this timestamp
+  google.protobuf.Timestamp since = 4;
+
+  // Include historical messages
+  bool include_history = 5;
+
+  // Maximum messages to buffer
+  int32 buffer_size = 6;
+}
+
+// PollMessagesRequest polls for messages
+message PollMessagesRequest {
+  string agent_id = 1;
+  int32 max_messages = 2;
+  google.protobuf.Timestamp since = 3;
+  repeated string channel_ids = 4;
+  bool mark_as_delivered = 5;
+}
+
+// PollMessagesResponse returns messages
+message PollMessagesResponse {
+  repeated MessageEnvelope messages = 1;
+  bool has_more = 2;
+  google.protobuf.Timestamp last_timestamp = 3;
+}
+
+// AckDeliveryRequest acknowledges receipt
+message AckDeliveryRequest {
+  string agent_id = 1;
+  repeated string message_ids = 2;
+  google.protobuf.Timestamp received_at = 3;
+}
+
+// AckDeliveryResponse confirms acknowledgment
+message AckDeliveryResponse {
+  int32 acknowledged_count = 1;
+  repeated string failed_message_ids = 2;
+}
+
+// UploadKeyBundleRequest uploads encryption keys
+message UploadKeyBundleRequest {
+  string agent_id = 1;
+  KeyBundle key_bundle = 2;
+  bool replace_existing = 3;
+}
+
+// UploadKeyBundleResponse confirms upload
+message UploadKeyBundleResponse {
+  string key_bundle_id = 1;
+  google.protobuf.Timestamp uploaded_at = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+// FetchKeyBundleRequest retrieves keys
+message FetchKeyBundleRequest {
+  string agent_id = 1;
+  bool include_prekeys = 2;
+}
+
+// CreateChannelRequest creates a channel
+message CreateChannelRequest {
+  string channel_name = 1;
+  string creator_id = 2;
+  repeated string member_ids = 3;
+  ChannelType type = 4;
+  ChannelConfig config = 5;
+  map<string, string> metadata = 6;
+}
+
+// JoinChannelRequest joins a channel
+message JoinChannelRequest {
+  string channel_id = 1;
+  string agent_id = 2;
+  string invite_code = 3;
+}
+
+// JoinChannelResponse confirms join
+message JoinChannelResponse {
+  string channel_id = 1;
+  google.protobuf.Timestamp joined_at = 2;
+  int32 member_count = 3;
+}
+
+// LeaveChannelRequest leaves a channel
+message LeaveChannelRequest {
+  string channel_id = 1;
+  string agent_id = 2;
+}
+
+// LeaveChannelResponse confirms leave
+message LeaveChannelResponse {
+  bool success = 1;
+  google.protobuf.Timestamp left_at = 2;
+}
+
+// ListChannelsRequest lists channels
+message ListChannelsRequest {
+  string agent_id = 1;
+  repeated ChannelType types = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+// ListChannelsResponse returns channels
+message ListChannelsResponse {
+  repeated Channel channels = 1;
+  string next_page_token = 2;
+  int32 total_count = 3;
+}
+
+// GetMessageStatusRequest retrieves status
+message GetMessageStatusRequest {
+  string message_id = 1;
+}
+
+// SearchMessagesRequest searches messages
+message SearchMessagesRequest {
+  string agent_id = 1;
+  string query = 2;
+  repeated string channel_ids = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Timestamp end_time = 5;
+  int32 max_results = 6;
+}
+
+// SearchMessagesResponse returns results
+message SearchMessagesResponse {
+  repeated MessageEnvelope messages = 1;
+  int32 total_matches = 2;
+  string next_cursor = 3;
+}
+
+// DeleteMessageRequest deletes a message
+message DeleteMessageRequest {
+  string message_id = 1;
+  string agent_id = 2;
+  bool delete_for_everyone = 3;
+}
+
+// DeleteMessageResponse confirms deletion
+message DeleteMessageResponse {
+  bool success = 1;
+  google.protobuf.Timestamp deleted_at = 2;
+}
+
+// UpdateMessageRequest edits a message
+message UpdateMessageRequest {
+  string message_id = 1;
+  string sender_id = 2;
+  EncryptedPayload new_payload = 3;
+}
+
+// AddReactionRequest adds reaction
+message AddReactionRequest {
+  string message_id = 1;
+  string agent_id = 2;
+  string reaction = 3;
+}
+
+// AddReactionResponse confirms reaction
+message AddReactionResponse {
+  bool success = 1;
+  int32 total_reactions = 2;
+}
+
+// StreamPresenceRequest streams presence
+message StreamPresenceRequest {
+  string agent_id = 1;
+  repeated string watch_agent_ids = 2;
+}
+
+// PresenceUpdate provides presence updates
+message PresenceUpdate {
+  string agent_id = 1;
+  PresenceStatus status = 2;
+  google.protobuf.Timestamp last_seen = 3;
+  string status_message = 4;
+}
+
+// UpdatePresenceRequest updates presence
+message UpdatePresenceRequest {
+  string agent_id = 1;
+  PresenceStatus status = 2;
+  string status_message = 3;
+}
+
+// UpdatePresenceResponse confirms update
+message UpdatePresenceResponse {
+  PresenceStatus status = 1;
+  google.protobuf.Timestamp updated_at = 2;
+}
+
+// MessageEnvelope wraps an encrypted message
+message MessageEnvelope {
+  // Unique message identifier
+  string message_id = 1;
+
+  // Sender agent ID
+  string sender_id = 2;
+
+  // Recipient agent IDs
+  repeated string recipient_ids = 3;
+
+  // Channel ID for group messages
+  string channel_id = 4;
+
+  // Encrypted payload
+  EncryptedPayload payload = 5;
+
+  // Message metadata
+  MessageMetadata metadata = 6;
+
+  // Delivery status
+  DeliveryStatus delivery_status = 7;
+
+  // Timestamps
+  google.protobuf.Timestamp sent_at = 8;
+  google.protobuf.Timestamp delivered_at = 9;
+  google.protobuf.Timestamp read_at = 10;
+  google.protobuf.Timestamp expires_at = 11;
+
+  // Thread information
+  string reply_to = 12;
+  int32 thread_count = 13;
+
+  // Reactions
+  repeated Reaction reactions = 14;
+
+  // Edit history
+  repeated Edit edits = 15;
+}
+
+// EncryptedPayload contains encrypted content
+message EncryptedPayload {
+  // Encryption algorithm used
+  EncryptionAlgorithm algorithm = 1;
+
+  // Encrypted content
+  bytes ciphertext = 2;
+
+  // Initialization vector
+  bytes iv = 3;
+
+  // Authentication tag (for AEAD)
+  bytes auth_tag = 4;
+
+  // Sender's ephemeral public key
+  bytes sender_ephemeral_key = 5;
+
+  // Per-recipient encrypted keys
+  repeated RecipientKey recipient_keys = 6;
+
+  // Key version used
+  int32 key_version = 7;
+}
+
+// RecipientKey contains per-recipient encryption
+message RecipientKey {
+  string recipient_id = 1;
+  bytes encrypted_key = 2;
+  bytes key_id = 3;
+}
+
+// MessageMetadata contains message attributes
+message MessageMetadata {
+  // Message type
+  MessageType type = 1;
+
+  // Content type (MIME)
+  string content_type = 2;
+
+  // Message size in bytes
+  int64 size_bytes = 3;
+
+  // Attachments
+  repeated Attachment attachments = 4;
+
+  // Custom attributes
+  map<string, string> attributes = 5;
+
+  // Importance flag
+  bool important = 6;
+
+  // Confidential flag
+  bool confidential = 7;
+}
+
+// DeliveryOptions controls delivery behavior
+message DeliveryOptions {
+  // Require end-to-end encryption
+  bool require_encryption = 1;
+
+  // Require delivery acknowledgment
+  bool require_ack = 2;
+
+  // Maximum delivery attempts
+  int32 max_attempts = 3;
+
+  // Retry delay
+  google.protobuf.Duration retry_delay = 4;
+
+  // Store for offline delivery
+  bool store_offline = 5;
+
+  // Push notification
+  bool send_push = 6;
+}
+
+// KeyBundle contains cryptographic keys
+message KeyBundle {
+  string agent_id = 1;
+
+  // Identity key (long-term)
+  bytes identity_key = 2;
+
+  // Signed pre-key
+  SignedPreKey signed_prekey = 3;
+
+  // One-time pre-keys
+  repeated bytes one_time_prekeys = 4;
+
+  // Key bundle signature
+  bytes signature = 5;
+
+  // Upload timestamp
+  google.protobuf.Timestamp uploaded_at = 6;
+}
+
+// SignedPreKey contains signed pre-key
+message SignedPreKey {
+  int32 key_id = 1;
+  bytes public_key = 2;
+  bytes signature = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+// Channel represents a communication channel
+message Channel {
+  string channel_id = 1;
+  string channel_name = 2;
+  ChannelType type = 3;
+  string creator_id = 4;
+  repeated string member_ids = 5;
+  ChannelConfig config = 6;
+  map<string, string> metadata = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  int32 message_count = 10;
+  MessageEnvelope last_message = 11;
+}
+
+// ChannelConfig defines channel settings
+message ChannelConfig {
+  bool encrypted = 1;
+  bool persistent = 2;
+  int32 max_members = 3;
+  google.protobuf.Duration message_retention = 4;
+  bool allow_invite = 5;
+  repeated Permission permissions = 6;
+}
+
+// MessageStatus tracks delivery status
+message MessageStatus {
+  string message_id = 1;
+  DeliveryStatus overall_status = 2;
+  repeated RecipientStatus recipient_status = 3;
+  google.protobuf.Timestamp last_updated = 4;
+  int32 delivery_attempts = 5;
+}
+
+// RecipientStatus tracks per-recipient delivery
+message RecipientStatus {
+  string recipient_id = 1;
+  DeliveryStatus status = 2;
+  google.protobuf.Timestamp delivered_at = 3;
+  google.protobuf.Timestamp read_at = 4;
+  string error_message = 5;
+}
+
+// Attachment represents file attachment
+message Attachment {
+  string attachment_id = 1;
+  string filename = 2;
+  string content_type = 3;
+  int64 size_bytes = 4;
+  bytes thumbnail = 5;
+  string download_url = 6;
+  bytes encryption_key = 7;
+}
+
+// Reaction represents emoji reaction
+message Reaction {
+  string agent_id = 1;
+  string reaction = 2;
+  google.protobuf.Timestamp reacted_at = 3;
+}
+
+// Edit tracks message edits
+message Edit {
+  int32 edit_number = 1;
+  google.protobuf.Timestamp edited_at = 2;
+  string editor_id = 3;
+}
+
+// EncryptionStatus verifies encryption
+message EncryptionStatus {
+  bool encrypted = 1;
+  EncryptionAlgorithm algorithm = 2;
+  bool verified = 3;
+  string fingerprint = 4;
+}
+
+// Permission defines channel permissions
+message Permission {
+  PermissionType type = 1;
+  repeated string agent_ids = 2;
+}
+
+// Enums
+
+enum MessageType {
+  MESSAGE_TYPE_UNSPECIFIED = 0;
+  MESSAGE_TYPE_TEXT = 1;
+  MESSAGE_TYPE_BINARY = 2;
+  MESSAGE_TYPE_FILE = 3;
+  MESSAGE_TYPE_COMMAND = 4;
+  MESSAGE_TYPE_SYSTEM = 5;
+  MESSAGE_TYPE_NOTIFICATION = 6;
+}
+
+enum Priority {
+  PRIORITY_UNSPECIFIED = 0;
+  PRIORITY_LOW = 1;
+  PRIORITY_NORMAL = 2;
+  PRIORITY_HIGH = 3;
+  PRIORITY_URGENT = 4;
+}
+
+enum DeliveryStatus {
+  DELIVERY_STATUS_UNSPECIFIED = 0;
+  DELIVERY_STATUS_PENDING = 1;
+  DELIVERY_STATUS_SENT = 2;
+  DELIVERY_STATUS_DELIVERED = 3;
+  DELIVERY_STATUS_READ = 4;
+  DELIVERY_STATUS_FAILED = 5;
+  DELIVERY_STATUS_EXPIRED = 6;
+}
+
+enum EncryptionAlgorithm {
+  ENCRYPTION_ALGORITHM_UNSPECIFIED = 0;
+  ENCRYPTION_ALGORITHM_AES_256_GCM = 1;
+  ENCRYPTION_ALGORITHM_CHACHA20_POLY1305 = 2;
+  ENCRYPTION_ALGORITHM_SIGNAL_PROTOCOL = 3;
+  ENCRYPTION_ALGORITHM_DOUBLE_RATCHET = 4;
+}
+
+enum ChannelType {
+  CHANNEL_TYPE_UNSPECIFIED = 0;
+  CHANNEL_TYPE_DIRECT = 1;
+  CHANNEL_TYPE_GROUP = 2;
+  CHANNEL_TYPE_BROADCAST = 3;
+  CHANNEL_TYPE_SYSTEM = 4;
+}
+
+enum PresenceStatus {
+  PRESENCE_STATUS_UNSPECIFIED = 0;
+  PRESENCE_STATUS_ONLINE = 1;
+  PRESENCE_STATUS_AWAY = 2;
+  PRESENCE_STATUS_BUSY = 3;
+  PRESENCE_STATUS_OFFLINE = 4;
+}
+
+enum PermissionType {
+  PERMISSION_TYPE_UNSPECIFIED = 0;
+  PERMISSION_TYPE_SEND_MESSAGE = 1;
+  PERMISSION_TYPE_ADD_MEMBER = 2;
+  PERMISSION_TYPE_REMOVE_MEMBER = 3;
+  PERMISSION_TYPE_MODIFY_CHANNEL = 4;
+  PERMISSION_TYPE_DELETE_MESSAGE = 5;
+}

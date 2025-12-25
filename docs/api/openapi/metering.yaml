@@ -1,0 +1,877 @@
+openapi: 3.1.0
+info:
+  title: Metering API
+  description: |
+    The Metering API provides comprehensive usage tracking, billing event management, and quota enforcement
+    for autonomous agents. Track billable events, query usage summaries, and enforce resource quotas across
+    agent subscriptions.
+
+    ## Features
+    - Real-time event ingestion with sub-second latency
+    - Batch event processing for high-throughput scenarios
+    - Usage aggregation by subscription, time period, and event type
+    - Quota enforcement with configurable limits and thresholds
+    - Rate limiting and pagination support
+
+    ## Authentication
+    All endpoints require authentication via Bearer JWT token or API Key. Include credentials in the
+    Authorization header for all requests.
+  version: 1.0.0
+  contact:
+    name: Enablement Platform Team
+    email: api-support@enablement.dev
+    url: https://enablement.dev/support
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://api.enablement.dev
+    description: Production server
+  - url: https://api-staging.enablement.dev
+    description: Staging server
+  - url: http://localhost:8080
+    description: Local development server
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+tags:
+  - name: Events
+    description: Billable event ingestion and management
+  - name: Usage
+    description: Usage query and aggregation endpoints
+  - name: Quotas
+    description: Quota management and enforcement
+
+paths:
+  /v1/events:
+    post:
+      summary: Create billable event
+      description: |
+        Ingest a single billable event for usage tracking and billing. Events are processed
+        asynchronously and reflected in usage queries within seconds.
+      operationId: createEvent
+      tags:
+        - Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BillableEvent'
+            examples:
+              compute_event:
+                summary: Compute usage event
+                value:
+                  event_id: "evt_2Nkf9c8dK3mP"
+                  agent_id: "agent_7Hf3kL9mQ2pR"
+                  subscription_id: "sub_4Kd8fJ2nM9qW"
+                  event_type: "compute.execution"
+                  timestamp: "2025-12-25T10:30:00Z"
+                  quantity: 1500
+                  unit: "milliseconds"
+                  metadata:
+                    runtime_type: "gvisor"
+                    region: "us-east-1"
+                    memory_mb: 512
+              storage_event:
+                summary: Storage usage event
+                value:
+                  event_id: "evt_9Xk2dL7mN4pQ"
+                  agent_id: "agent_7Hf3kL9mQ2pR"
+                  subscription_id: "sub_4Kd8fJ2nM9qW"
+                  event_type: "storage.write"
+                  timestamp: "2025-12-25T10:31:15Z"
+                  quantity: 2048
+                  unit: "bytes"
+                  metadata:
+                    file_type: "document"
+                    encrypted: true
+      responses:
+        '201':
+          description: Event created successfully
+          headers:
+            X-RateLimit-Limit:
+              description: Maximum requests per time window
+              schema:
+                type: integer
+                example: 1000
+            X-RateLimit-Remaining:
+              description: Remaining requests in current window
+              schema:
+                type: integer
+                example: 987
+            X-RateLimit-Reset:
+              description: Unix timestamp when rate limit resets
+              schema:
+                type: integer
+                example: 1735125600
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event_id:
+                    type: string
+                    description: Unique event identifier
+                  status:
+                    type: string
+                    enum: [accepted, processing]
+                  received_at:
+                    type: string
+                    format: date-time
+              example:
+                event_id: "evt_2Nkf9c8dK3mP"
+                status: "accepted"
+                received_at: "2025-12-25T10:30:00.123Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/events/batch:
+    post:
+      summary: Create multiple events in batch
+      description: |
+        Ingest multiple billable events in a single request for improved throughput.
+        Batch size is limited to 1000 events per request. Partial failures are supported -
+        the response indicates which events succeeded or failed.
+      operationId: createEventBatch
+      tags:
+        - Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - events
+              properties:
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items:
+                    $ref: '#/components/schemas/BillableEvent'
+            example:
+              events:
+                - event_id: "evt_1Abc2Def3Ghi"
+                  agent_id: "agent_7Hf3kL9mQ2pR"
+                  subscription_id: "sub_4Kd8fJ2nM9qW"
+                  event_type: "compute.execution"
+                  timestamp: "2025-12-25T10:30:00Z"
+                  quantity: 1500
+                  unit: "milliseconds"
+                - event_id: "evt_4Jkl5Mno6Pqr"
+                  agent_id: "agent_7Hf3kL9mQ2pR"
+                  subscription_id: "sub_4Kd8fJ2nM9qW"
+                  event_type: "storage.write"
+                  timestamp: "2025-12-25T10:31:00Z"
+                  quantity: 2048
+                  unit: "bytes"
+      responses:
+        '207':
+          description: Batch processed with partial success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                    description: Total number of events in batch
+                  succeeded:
+                    type: integer
+                    description: Number of successfully processed events
+                  failed:
+                    type: integer
+                    description: Number of failed events
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        event_id:
+                          type: string
+                        status:
+                          type: string
+                          enum: [accepted, failed]
+                        error:
+                          type: string
+                          description: Error message if status is failed
+              example:
+                total: 2
+                succeeded: 2
+                failed: 0
+                results:
+                  - event_id: "evt_1Abc2Def3Ghi"
+                    status: "accepted"
+                  - event_id: "evt_4Jkl5Mno6Pqr"
+                    status: "accepted"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/usage/{subscription_id}:
+    get:
+      summary: Query usage for subscription
+      description: |
+        Retrieve aggregated usage data for a specific subscription. Supports filtering by
+        time range, event type, and agent ID. Results are paginated for large datasets.
+      operationId: getUsage
+      tags:
+        - Usage
+      parameters:
+        - name: subscription_id
+          in: path
+          required: true
+          description: Unique subscription identifier
+          schema:
+            type: string
+          example: "sub_4Kd8fJ2nM9qW"
+        - name: start_time
+          in: query
+          description: Start of time range (RFC3339 format)
+          schema:
+            type: string
+            format: date-time
+          example: "2025-12-01T00:00:00Z"
+        - name: end_time
+          in: query
+          description: End of time range (RFC3339 format)
+          schema:
+            type: string
+            format: date-time
+          example: "2025-12-25T23:59:59Z"
+        - name: event_type
+          in: query
+          description: Filter by specific event type
+          schema:
+            type: string
+          example: "compute.execution"
+        - name: agent_id
+          in: query
+          description: Filter by specific agent
+          schema:
+            type: string
+          example: "agent_7Hf3kL9mQ2pR"
+        - name: aggregation
+          in: query
+          description: Aggregation granularity
+          schema:
+            type: string
+            enum: [hourly, daily, monthly, total]
+            default: total
+          example: "daily"
+        - name: page
+          in: query
+          description: Page number for pagination (1-indexed)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: page_size
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+          example: 50
+      responses:
+        '200':
+          description: Usage data retrieved successfully
+          headers:
+            X-RateLimit-Limit:
+              description: Maximum requests per time window
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              description: Remaining requests in current window
+              schema:
+                type: integer
+            X-Total-Count:
+              description: Total number of items across all pages
+              schema:
+                type: integer
+            Link:
+              description: Pagination links (next, prev, first, last)
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageSummary'
+              example:
+                subscription_id: "sub_4Kd8fJ2nM9qW"
+                period:
+                  start: "2025-12-01T00:00:00Z"
+                  end: "2025-12-25T23:59:59Z"
+                usage:
+                  - event_type: "compute.execution"
+                    total_quantity: 450000
+                    unit: "milliseconds"
+                    event_count: 127
+                    cost_usd: 4.50
+                  - event_type: "storage.write"
+                    total_quantity: 104857600
+                    unit: "bytes"
+                    event_count: 89
+                    cost_usd: 0.52
+                  - event_type: "network.egress"
+                    total_quantity: 52428800
+                    unit: "bytes"
+                    event_count: 45
+                    cost_usd: 0.26
+                total_cost_usd: 5.28
+                pagination:
+                  page: 1
+                  page_size: 50
+                  total_pages: 1
+                  total_items: 3
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/quotas/{agent_id}:
+    get:
+      summary: Get quota status for agent
+      description: |
+        Retrieve current quota status including limits, current usage, and remaining capacity
+        for a specific agent. Quotas can be defined per event type or resource category.
+      operationId: getQuotaStatus
+      tags:
+        - Quotas
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          description: Unique agent identifier
+          schema:
+            type: string
+          example: "agent_7Hf3kL9mQ2pR"
+      responses:
+        '200':
+          description: Quota status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaStatus'
+              example:
+                agent_id: "agent_7Hf3kL9mQ2pR"
+                subscription_id: "sub_4Kd8fJ2nM9qW"
+                quotas:
+                  - resource_type: "compute.execution"
+                    limit: 3600000
+                    unit: "milliseconds"
+                    period: "monthly"
+                    current_usage: 450000
+                    remaining: 3150000
+                    utilization_percent: 12.5
+                    reset_at: "2026-01-01T00:00:00Z"
+                    enforcement: "hard_limit"
+                  - resource_type: "storage.total"
+                    limit: 10737418240
+                    unit: "bytes"
+                    period: "monthly"
+                    current_usage: 104857600
+                    remaining: 10632560640
+                    utilization_percent: 0.98
+                    reset_at: "2026-01-01T00:00:00Z"
+                    enforcement: "soft_limit"
+                quota_exceeded: false
+                warnings:
+                  - message: "Approaching compute quota limit"
+                    threshold_percent: 80
+                    action: "notify_admin"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      summary: Update quota limits for agent
+      description: |
+        Update quota limits for a specific agent. Requires admin privileges.
+        Changes take effect immediately and may trigger quota recalculation.
+      operationId: updateQuotaLimits
+      tags:
+        - Quotas
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          description: Unique agent identifier
+          schema:
+            type: string
+          example: "agent_7Hf3kL9mQ2pR"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - quotas
+              properties:
+                quotas:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - resource_type
+                      - limit
+                      - unit
+                      - period
+                    properties:
+                      resource_type:
+                        type: string
+                      limit:
+                        type: number
+                        minimum: 0
+                      unit:
+                        type: string
+                      period:
+                        type: string
+                        enum: [hourly, daily, monthly, yearly]
+                      enforcement:
+                        type: string
+                        enum: [hard_limit, soft_limit, warning_only]
+                        default: hard_limit
+            example:
+              quotas:
+                - resource_type: "compute.execution"
+                  limit: 7200000
+                  unit: "milliseconds"
+                  period: "monthly"
+                  enforcement: "hard_limit"
+      responses:
+        '200':
+          description: Quota limits updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT token authentication. Include the token in the Authorization header:
+        `Authorization: Bearer <token>`
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        API key authentication. Include your API key in the X-API-Key header:
+        `X-API-Key: <your-api-key>`
+
+  schemas:
+    BillableEvent:
+      type: object
+      required:
+        - event_id
+        - agent_id
+        - subscription_id
+        - event_type
+        - timestamp
+        - quantity
+        - unit
+      properties:
+        event_id:
+          type: string
+          description: Unique event identifier (client-generated, idempotency key)
+          pattern: '^evt_[a-zA-Z0-9]{12,16}$'
+          example: "evt_2Nkf9c8dK3mP"
+        agent_id:
+          type: string
+          description: Agent that generated the event
+          pattern: '^agent_[a-zA-Z0-9]{12,16}$'
+          example: "agent_7Hf3kL9mQ2pR"
+        subscription_id:
+          type: string
+          description: Subscription to bill for this event
+          pattern: '^sub_[a-zA-Z0-9]{12,16}$'
+          example: "sub_4Kd8fJ2nM9qW"
+        event_type:
+          type: string
+          description: Type of billable event
+          enum:
+            - compute.execution
+            - compute.idle
+            - storage.read
+            - storage.write
+            - storage.total
+            - network.ingress
+            - network.egress
+            - api.call
+            - model.inference
+          example: "compute.execution"
+        timestamp:
+          type: string
+          format: date-time
+          description: Event occurrence timestamp (RFC3339)
+          example: "2025-12-25T10:30:00Z"
+        quantity:
+          type: number
+          description: Measured quantity for billing
+          minimum: 0
+          example: 1500
+        unit:
+          type: string
+          description: Unit of measurement
+          enum:
+            - milliseconds
+            - seconds
+            - bytes
+            - kilobytes
+            - megabytes
+            - requests
+            - tokens
+          example: "milliseconds"
+        metadata:
+          type: object
+          description: Additional event context (schema-free)
+          additionalProperties: true
+          example:
+            runtime_type: "gvisor"
+            region: "us-east-1"
+            memory_mb: 512
+            cpu_cores: 2
+
+    UsageSummary:
+      type: object
+      required:
+        - subscription_id
+        - period
+        - usage
+        - total_cost_usd
+      properties:
+        subscription_id:
+          type: string
+          description: Subscription identifier
+          example: "sub_4Kd8fJ2nM9qW"
+        period:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: string
+              format: date-time
+              example: "2025-12-01T00:00:00Z"
+            end:
+              type: string
+              format: date-time
+              example: "2025-12-25T23:59:59Z"
+        usage:
+          type: array
+          items:
+            type: object
+            required:
+              - event_type
+              - total_quantity
+              - unit
+              - event_count
+              - cost_usd
+            properties:
+              event_type:
+                type: string
+                example: "compute.execution"
+              total_quantity:
+                type: number
+                description: Aggregated quantity across all events
+                example: 450000
+              unit:
+                type: string
+                example: "milliseconds"
+              event_count:
+                type: integer
+                description: Number of events in this category
+                example: 127
+              cost_usd:
+                type: number
+                format: decimal
+                description: Total cost in USD
+                example: 4.50
+              breakdown:
+                type: array
+                description: Optional time-based breakdown
+                items:
+                  type: object
+                  properties:
+                    period:
+                      type: string
+                      format: date-time
+                    quantity:
+                      type: number
+                    cost_usd:
+                      type: number
+        total_cost_usd:
+          type: number
+          format: decimal
+          description: Total cost across all event types
+          example: 5.28
+        pagination:
+          type: object
+          properties:
+            page:
+              type: integer
+              example: 1
+            page_size:
+              type: integer
+              example: 50
+            total_pages:
+              type: integer
+              example: 1
+            total_items:
+              type: integer
+              example: 3
+
+    QuotaStatus:
+      type: object
+      required:
+        - agent_id
+        - subscription_id
+        - quotas
+        - quota_exceeded
+      properties:
+        agent_id:
+          type: string
+          description: Agent identifier
+          example: "agent_7Hf3kL9mQ2pR"
+        subscription_id:
+          type: string
+          description: Associated subscription
+          example: "sub_4Kd8fJ2nM9qW"
+        quotas:
+          type: array
+          items:
+            type: object
+            required:
+              - resource_type
+              - limit
+              - unit
+              - period
+              - current_usage
+              - remaining
+              - utilization_percent
+              - reset_at
+            properties:
+              resource_type:
+                type: string
+                description: Type of resource quota applies to
+                example: "compute.execution"
+              limit:
+                type: number
+                description: Maximum allowed quantity
+                example: 3600000
+              unit:
+                type: string
+                example: "milliseconds"
+              period:
+                type: string
+                enum: [hourly, daily, monthly, yearly]
+                example: "monthly"
+              current_usage:
+                type: number
+                description: Current usage in this period
+                example: 450000
+              remaining:
+                type: number
+                description: Remaining quota
+                example: 3150000
+              utilization_percent:
+                type: number
+                format: decimal
+                description: Percentage of quota used
+                minimum: 0
+                maximum: 100
+                example: 12.5
+              reset_at:
+                type: string
+                format: date-time
+                description: When quota resets
+                example: "2026-01-01T00:00:00Z"
+              enforcement:
+                type: string
+                enum: [hard_limit, soft_limit, warning_only]
+                description: Quota enforcement policy
+                example: "hard_limit"
+        quota_exceeded:
+          type: boolean
+          description: True if any quota is exceeded
+          example: false
+        warnings:
+          type: array
+          items:
+            type: object
+            properties:
+              message:
+                type: string
+                example: "Approaching compute quota limit"
+              threshold_percent:
+                type: number
+                example: 80
+              action:
+                type: string
+                enum: [notify_admin, throttle, block]
+                example: "notify_admin"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+        - timestamp
+      properties:
+        error:
+          type: string
+          description: Error code
+          example: "invalid_request"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Missing required field: event_type"
+        details:
+          type: object
+          description: Additional error context
+          additionalProperties: true
+          example:
+            field: "event_type"
+            constraint: "required"
+        request_id:
+          type: string
+          description: Unique request identifier for debugging
+          example: "req_9Xk2dL7mN4pQ"
+        timestamp:
+          type: string
+          format: date-time
+          description: Error occurrence time
+          example: "2025-12-25T10:30:00.123Z"
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters or malformed request body
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "invalid_request"
+            message: "Invalid event_type value"
+            details:
+              field: "event_type"
+              provided: "invalid.type"
+              allowed_values: ["compute.execution", "storage.write"]
+            request_id: "req_9Xk2dL7mN4pQ"
+            timestamp: "2025-12-25T10:30:00.123Z"
+
+    Unauthorized:
+      description: Missing or invalid authentication credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "unauthorized"
+            message: "Invalid or expired JWT token"
+            request_id: "req_3Fj8kM2nP5qS"
+            timestamp: "2025-12-25T10:30:00.123Z"
+
+    Forbidden:
+      description: Insufficient permissions to access resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "forbidden"
+            message: "Admin privileges required to update quotas"
+            request_id: "req_7Lm9kN3pQ6rT"
+            timestamp: "2025-12-25T10:30:00.123Z"
+
+    NotFound:
+      description: Requested resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "not_found"
+            message: "Subscription not found: sub_nonexistent"
+            request_id: "req_2Hk7jL4mN8pR"
+            timestamp: "2025-12-25T10:30:00.123Z"
+
+    RateLimitExceeded:
+      description: Rate limit exceeded, retry after specified time
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+            example: 60
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "rate_limit_exceeded"
+            message: "Rate limit of 1000 requests per hour exceeded"
+            details:
+              limit: 1000
+              window: "1h"
+              retry_after: 60
+            request_id: "req_8Nm6kP2qR9sT"
+            timestamp: "2025-12-25T10:30:00.123Z"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "internal_error"
+            message: "An unexpected error occurred"
+            request_id: "req_5Kj9mN7pQ3rS"
+            timestamp: "2025-12-25T10:30:00.123Z"
