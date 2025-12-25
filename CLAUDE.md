@@ -1,13 +1,48 @@
-# Claude Code Configuration - Enablement
+# Claude Code Playbook: creto-enablement
 
 ## 🎯 CRITICAL: SDD-FIRST METHODOLOGY
 
 **This project follows a Software Design Document (SDD) first approach.**
 
-### Core Principle
 > **Design before code. Document before implement. Specify before build.**
 
 No code should be written until the corresponding SDD section is complete and approved.
+
+---
+
+## Project Overview
+
+**creto-enablement** is a Rust monorepo containing the Enablement Layer products for the Creto Sovereign platform. These products provide orchestration and governance capabilities for AI agents.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    ENABLEMENT LAYER (This Repo)                 │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌─────────┐ │
+│  │   Metering   │ │   Oversight  │ │   Runtime    │ │Messaging│ │
+│  │  (billing)   │ │    (HITL)    │ │  (sandbox)   │ │  (E2E)  │ │
+│  └──────────────┘ └──────────────┘ └──────────────┘ └─────────┘ │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓ depends on
+┌─────────────────────────────────────────────────────────────────┐
+│                    SECURITY LAYER (External)                    │
+│      creto-authz  │  creto-memory  │  creto-storage             │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓ depends on
+┌─────────────────────────────────────────────────────────────────┐
+│                    PLATFORM LAYER (External)                    │
+│   creto-nhi  │  creto-crypto  │  creto-consensus  │  creto-audit│
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Design Philosophy
+
+**Pattern: Extract from OSS → Rebuild with Sovereign Primitives**
+
+Each product follows this approach:
+1. Identify leading OSS implementation (Lago, HumanLayer, Agent Sandbox, Signal)
+2. Extract proven patterns, data models, APIs
+3. Rebuild in Rust with NHI/Crypto-Agility/Consensus/Audit integrated from foundation
+4. Connect to Authorization service (168ns path) for inline policy enforcement
 
 ---
 
@@ -26,12 +61,134 @@ docs/sdd/
 ├── 06-integration-design.md # External systems, third-party services
 ├── 07-deployment-design.md  # Infrastructure, CI/CD, environments
 ├── 08-testing-strategy.md   # Test plans, coverage requirements
-└── 09-implementation-plan.md # Phased rollout, milestones, timeline
+├── 09-implementation-plan.md # Phased rollout, milestones, timeline
+│
+├── products/                # Per-product SDDs
+│   ├── metering.md          # creto-metering design
+│   ├── oversight.md         # creto-oversight design
+│   ├── runtime.md           # creto-runtime design
+│   └── messaging.md         # creto-messaging design
 ```
 
 ---
 
-## 🔄 SDD Development Workflow
+## Repository Structure
+
+```
+creto-enablement/
+├── Cargo.toml                      # Workspace root
+├── CLAUDE.md                       # This file
+├── README.md
+├── docs/
+│   ├── sdd/                        # Software Design Documents
+│   │   └── products/               # Per-product SDDs
+│   ├── decisions/                  # Architecture Decision Records
+│   └── diagrams/                   # Mermaid/ASCII diagrams
+├── crates/
+│   ├── creto-metering/             # Usage-based billing (Lago patterns)
+│   ├── creto-oversight/            # Human-in-the-loop (HumanLayer patterns)
+│   ├── creto-runtime/              # Sandboxed execution (Agent Sandbox patterns)
+│   ├── creto-messaging/            # Secure agent messaging (Signal patterns)
+│   └── creto-enablement-common/    # Shared types
+├── examples/                       # Usage examples
+├── tests/                          # Integration tests
+└── benches/                        # Performance benchmarks
+```
+
+---
+
+## OSS Pattern References
+
+When implementing features, refer to these OSS projects for proven patterns:
+
+### Metering (Lago Patterns)
+- **Repo**: getlago/lago
+- **Docs**: https://getlago.com/docs/guide/events/ingesting-usage
+- **Key patterns**:
+  - Event schema: `transaction_id`, `external_subscription_id`, `code`, `timestamp`, `properties`
+  - Aggregation types: `COUNT`, `SUM`, `UNIQUE_COUNT`, `MAX`
+  - Pricing models: flat fee, per-unit, tiered (graduated/volume), package, prepaid credits
+  - Idempotency via `transaction_id`
+
+### Oversight (HumanLayer Patterns)
+- **Repo**: humanlayer/humanlayer
+- **Docs**: https://humanlayer.vercel.app/
+- **Key patterns**:
+  - `@require_approval()` decorator pattern
+  - `human_as_tool()` for agent-initiated human contact
+  - Channel abstraction (Slack, email, webhook)
+  - Escalation chains with timeout handling
+  - Checkpoint/resume for durability
+
+### Runtime (Agent Sandbox Patterns)
+- **Repo**: kubernetes-sigs/agent-sandbox
+- **Docs**: https://agent-sandbox.sigs.k8s.io/
+- **Key patterns**:
+  - CRDs: `Sandbox`, `SandboxTemplate`, `SandboxClaim`, `SandboxWarmPool`
+  - Warm pool for sub-second allocation
+  - Runtime abstraction (gVisor vs Kata)
+  - Python SDK context manager pattern
+
+### Messaging (Signal Protocol Patterns)
+- **Spec**: https://signal.org/docs/specifications/doubleratchet/
+- **Key patterns**:
+  - X3DH for initial key agreement (adapt for NHI keys)
+  - Double Ratchet for forward secrecy
+  - Envelope: encrypted payload + wrapped key + signature
+  - PQXDH/Triple Ratchet for PQC (ML-KEM integration)
+
+---
+
+## Integration Points
+
+### With Authorization (creto-authz)
+
+All four products integrate with the Authorization service:
+
+```rust
+// Metering: QuotaEnforcer called inline
+// Oversight: Policy returns REQUIRES_OVERSIGHT
+// Runtime: Network egress checked via AuthZ
+// Messaging: Delivery gated by AuthZ
+```
+
+### With NHI (creto-nhi)
+
+Every data structure includes agent identity:
+
+```rust
+use creto_nhi::{AgentIdentity, DelegationChain};
+
+pub struct SomeCretoStruct {
+    pub agent_nhi: AgentIdentity,
+    pub delegation_chain: Vec<AgentIdentity>,
+}
+```
+
+### With Crypto-Agility (creto-crypto)
+
+Use platform crypto primitives, never hardcode algorithms.
+
+### With Audit (creto-audit)
+
+All operations log to immutable audit trail.
+
+---
+
+## Performance Targets
+
+| Operation | Target | Notes |
+|-----------|--------|-------|
+| Quota check | <10µs | In-memory bloom filter + Redis fallback |
+| Oversight state transition | <1ms | State machine update |
+| Warm pool claim | <100ms | Pre-warmed sandbox binding |
+| Cold sandbox spawn | <2s | gVisor, <5s Kata |
+| Message encryption | >100K msg/s | AES-256-GCM + ML-KEM wrap |
+| Message delivery auth | <1ms | AuthZ check (168ns) + routing |
+
+---
+
+## SDD Development Workflow
 
 ### Phase 1: Discovery & Requirements
 1. Define problem statement and target users
@@ -58,65 +215,7 @@ docs/sdd/
 
 ---
 
-## 📝 SDD Section Templates
-
-### Each SDD Section Must Include:
-- **Purpose**: Why this section exists
-- **Scope**: What it covers and doesn't cover
-- **Decisions**: Key design decisions with rationale
-- **Diagrams**: Visual representations where applicable
-- **Open Questions**: Unresolved items needing discussion
-- **Revision History**: Track changes and approvals
-
----
-
-## ⚠️ Rules of Engagement
-
-### DO:
-- Start every feature with an SDD section
-- Document decisions and their rationale
-- Update SDDs when requirements change
-- Use diagrams (Mermaid, ASCII) for clarity
-- Keep each document focused and concise
-
-### DON'T:
-- Write code before the design is documented
-- Skip sections because "it's obvious"
-- Let SDDs become stale
-- Create implementation without traceability to SDD
-
----
-
-## 🗂️ Project Structure
-
-```
-Enablement/
-├── CLAUDE.md              # This file - project instructions
-├── README.md              # Project overview (generated from SDD)
-├── docs/
-│   ├── sdd/               # Software Design Documents
-│   ├── decisions/         # Architecture Decision Records (ADRs)
-│   └── diagrams/          # Source files for diagrams
-├── src/                   # Source code (after SDD approval)
-├── tests/                 # Test files
-└── config/                # Configuration files
-```
-
----
-
-## 🚀 Getting Started
-
-When starting work on Enablement:
-
-1. **Review existing SDDs** in `/docs/sdd/`
-2. **Identify the section** relevant to your task
-3. **Update or create SDD** before any implementation
-4. **Get alignment** on design decisions
-5. **Then implement** following the documented design
-
----
-
-## 📊 SDD Status Tracking
+## SDD Status Tracking
 
 Use frontmatter in each SDD file:
 
@@ -132,11 +231,33 @@ reviewers: [names]
 
 ---
 
-## 🔗 Related Resources
+## Development Commands
 
-- Architecture Decision Records: `/docs/decisions/`
-- Diagrams source: `/docs/diagrams/`
-- Implementation tracking: GitHub Issues/Projects
+```bash
+# Build
+cargo build --workspace
+
+# Test
+cargo test --workspace
+
+# Specific crate
+cargo test -p creto-metering
+
+# Benchmarks
+cargo bench -p creto-metering -- quota
+cargo bench -p creto-messaging -- encryption
+cargo bench -p creto-runtime -- warmpool
+```
+
+---
+
+## Feature Flags
+
+```toml
+# creto-runtime: gvisor (default), kata, sgx
+# creto-oversight: slack (default), email (default), teams, servicenow
+# creto-metering: stripe
+```
 
 ---
 

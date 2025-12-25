@@ -1,0 +1,27 @@
+# Build artifacts
+/target/
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Claude Flow / Swarm (local state)
+.claude-flow/
+.swarm/
+
+# Environment
+.env
+.env.local
+*.local
+
+# Test coverage
+coverage/
+*.lcov
+
+# Logs
+*.log
+logs/
