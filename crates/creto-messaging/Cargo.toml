@@ -1,0 +1,43 @@
+[package]
+name = "creto-messaging"
+version = "0.1.0"
+edition = "2021"
+description = "Secure end-to-end encrypted messaging for AI agents using Signal protocol patterns"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/creto-systems/enablement"
+keywords = ["ai", "agent", "messaging", "encryption", "signal"]
+categories = ["cryptography", "network-programming"]
+
+[dependencies]
+creto-common = { path = "../creto-common" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Time handling
+chrono = { workspace = true }
+
+# Identifiers
+uuid = { workspace = true }
+
+# Async traits
+async-trait = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+
+# Cryptography (placeholder - will use creto-crypto in production)
+ring = { workspace = true }
+
+# Base64 encoding
+base64 = "0.22"
+
+# Database
+sqlx = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

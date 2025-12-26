@@ -1,0 +1,31 @@
+[package]
+name = "creto-integration-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Integration tests for Creto Enablement Layer"
+
+[dependencies]
+creto-common = { path = "../creto-common" }
+creto-metering = { path = "../creto-metering" }
+creto-oversight = { path = "../creto-oversight" }
+creto-runtime = { path = "../creto-runtime" }
+creto-messaging = { path = "../creto-messaging" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Time & IDs
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+# Database (for future database integration tests)
+sqlx = { workspace = true, optional = true }
+
+[features]
+default = []
+database = ["dep:sqlx"]

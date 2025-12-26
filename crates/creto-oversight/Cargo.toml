@@ -1,0 +1,31 @@
+[package]
+name = "creto-oversight"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Human-in-the-loop approval workflows for AI agents"
+
+[dependencies]
+creto-common = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+sqlx = { workspace = true }
+async-trait = { workspace = true }
+
+# Optional: Metering integration for usage tracking
+creto-metering = { workspace = true, optional = true }
+
+[features]
+default = []
+metering = ["dep:creto-metering"]
+
+[dev-dependencies]
+proptest = { workspace = true }
+tokio = { workspace = true, features = ["test-util", "macros"] }

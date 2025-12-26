@@ -1,0 +1,44 @@
+[package]
+name = "creto-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Sandboxed AI agent execution runtime for Creto Enablement Layer"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/creto-systems/enablement"
+keywords = ["ai", "agent", "sandbox", "runtime", "execution"]
+categories = ["development-tools", "api-bindings"]
+
+[dependencies]
+creto-common = { path = "../creto-common" }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Time handling
+chrono = { workspace = true }
+
+# Identifiers
+uuid = { workspace = true }
+
+# Async traits
+async-trait = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+
+# Database
+sqlx = { workspace = true }
+
+# Optional: Metering integration for usage tracking
+creto-metering = { workspace = true, optional = true }
+
+[features]
+default = []
+metering = ["dep:creto-metering"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
