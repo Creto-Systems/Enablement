@@ -3,7 +3,7 @@
 //! Quotas define limits on usage that can be enforced in real-time.
 
 use chrono::{DateTime, Utc};
-use creto_common::{AgentId, CretoError, CretoResult, OrganizationId};
+use creto_common::{AgentId, CretoResult, OrganizationId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -131,6 +131,12 @@ pub enum QuotaPeriod {
     Monthly,
     /// Never reset (lifetime quota).
     Lifetime,
+}
+
+impl Default for QuotaPeriod {
+    fn default() -> Self {
+        Self::Daily
+    }
 }
 
 impl QuotaPeriod {
@@ -311,6 +317,20 @@ pub struct QuotaStatus {
     pub period: QuotaPeriod,
     /// When the quota resets.
     pub resets_at: DateTime<Utc>,
+}
+
+impl Default for QuotaStatus {
+    fn default() -> Self {
+        Self {
+            metric_code: String::new(),
+            limit: 0,
+            used: 0,
+            remaining: 0,
+            percentage_used: 0.0,
+            period: QuotaPeriod::default(),
+            resets_at: Utc::now(),
+        }
+    }
 }
 
 #[cfg(test)]

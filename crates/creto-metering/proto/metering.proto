@@ -1,0 +1,233 @@
+syntax = "proto3";
+
+package creto.metering.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Metering Service - Usage Event Ingestion
+// ─────────────────────────────────────────────────────────────────────────────
+
+// MeteringService handles usage event ingestion and quota checks.
+service MeteringService {
+  // Ingest a single usage event.
+  rpc IngestEvent(IngestEventRequest) returns (IngestEventResponse);
+
+  // Ingest multiple usage events in a batch.
+  rpc IngestEventBatch(IngestEventBatchRequest) returns (IngestEventBatchResponse);
+
+  // Check if a quota allows a specific usage.
+  rpc CheckQuota(CheckQuotaRequest) returns (CheckQuotaResponse);
+
+  // Get current quota status for a metric.
+  rpc GetQuotaStatus(GetQuotaStatusRequest) returns (GetQuotaStatusResponse);
+
+  // Stream events for real-time processing (admin only).
+  rpc StreamEvents(StreamEventsRequest) returns (stream UsageEvent);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Messages
+// ─────────────────────────────────────────────────────────────────────────────
+
+// A usage event representing a billable action.
+message UsageEvent {
+  // Unique transaction ID for idempotency (required).
+  string transaction_id = 1;
+
+  // Organization UUID (required).
+  string organization_id = 2;
+
+  // Agent UUID (required).
+  string agent_id = 3;
+
+  // External subscription ID for billing integration (optional).
+  string external_subscription_id = 4;
+
+  // Event type code.
+  UsageEventType event_type = 5;
+
+  // Billable metric code (e.g., "api_calls").
+  string code = 6;
+
+  // Quantity of the billable unit (must be positive).
+  int64 quantity = 7;
+
+  // When the event occurred.
+  google.protobuf.Timestamp timestamp = 8;
+
+  // Additional properties for filtering.
+  google.protobuf.Struct properties = 9;
+
+  // Delegation depth when event was generated.
+  uint32 delegation_depth = 10;
+}
+
+// Types of usage events.
+enum UsageEventType {
+  USAGE_EVENT_TYPE_UNSPECIFIED = 0;
+
+  // API Usage
+  API_CALL = 1;
+  LLM_INFERENCE = 2;
+  EMBEDDING_GENERATION = 3;
+
+  // Token Usage
+  INPUT_TOKENS = 10;
+  OUTPUT_TOKENS = 11;
+  TOTAL_TOKENS = 12;
+
+  // Compute Usage
+  CPU_MILLISECONDS = 20;
+  MEMORY_MB_SECONDS = 21;
+  GPU_MILLISECONDS = 22;
+
+  // Storage Usage
+  STORAGE_BYTES = 30;
+  NETWORK_EGRESS_BYTES = 31;
+
+  // Enablement-Specific
+  OVERSIGHT_REQUEST = 40;
+  SANDBOX_EXECUTION = 41;
+  MESSAGE_SENT = 42;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ingestion
+// ─────────────────────────────────────────────────────────────────────────────
+
+message IngestEventRequest {
+  UsageEvent event = 1;
+}
+
+message IngestEventResponse {
+  // Whether the event was successfully ingested.
+  bool success = 1;
+
+  // Status of the ingestion.
+  IngestStatus status = 2;
+
+  // Error message if not successful.
+  string error_message = 3;
+}
+
+enum IngestStatus {
+  INGEST_STATUS_UNSPECIFIED = 0;
+  INGEST_STATUS_ACCEPTED = 1;
+  INGEST_STATUS_DUPLICATE = 2;
+  INGEST_STATUS_VALIDATION_ERROR = 3;
+  INGEST_STATUS_QUOTA_EXCEEDED = 4;
+  INGEST_STATUS_INTERNAL_ERROR = 5;
+}
+
+message IngestEventBatchRequest {
+  repeated UsageEvent events = 1;
+
+  // If true, continue processing remaining events on individual failures.
+  bool continue_on_error = 2;
+}
+
+message IngestEventBatchResponse {
+  // Number of events successfully ingested.
+  int32 accepted_count = 1;
+
+  // Number of duplicate events skipped.
+  int32 duplicate_count = 2;
+
+  // Number of events that failed validation.
+  int32 failed_count = 3;
+
+  // Per-event results (only included if there were failures).
+  repeated EventResult results = 4;
+}
+
+message EventResult {
+  // Index of the event in the batch.
+  int32 index = 1;
+
+  // Status of this specific event.
+  IngestStatus status = 2;
+
+  // Error message if failed.
+  string error_message = 3;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quota Checking
+// ─────────────────────────────────────────────────────────────────────────────
+
+message CheckQuotaRequest {
+  // Organization UUID.
+  string organization_id = 1;
+
+  // Agent UUID (optional, for agent-specific quotas).
+  string agent_id = 2;
+
+  // Metric code to check.
+  string metric_code = 3;
+
+  // Requested quantity.
+  int64 quantity = 4;
+}
+
+message CheckQuotaResponse {
+  // Whether the usage is allowed.
+  bool allowed = 1;
+
+  // Current usage in the period.
+  int64 current_usage = 2;
+
+  // Limit for the period.
+  int64 limit = 3;
+
+  // Remaining quota.
+  int64 remaining = 4;
+
+  // If not allowed, reason why.
+  string denial_reason = 5;
+}
+
+message GetQuotaStatusRequest {
+  string organization_id = 1;
+  string agent_id = 2;
+  string metric_code = 3;
+}
+
+message GetQuotaStatusResponse {
+  string metric_code = 1;
+  int64 limit = 2;
+  int64 current_usage = 3;
+  int64 remaining = 4;
+  double usage_percentage = 5;
+  QuotaPeriod period = 6;
+  google.protobuf.Timestamp period_start = 7;
+  google.protobuf.Timestamp period_end = 8;
+}
+
+enum QuotaPeriod {
+  QUOTA_PERIOD_UNSPECIFIED = 0;
+  QUOTA_PERIOD_HOURLY = 1;
+  QUOTA_PERIOD_DAILY = 2;
+  QUOTA_PERIOD_WEEKLY = 3;
+  QUOTA_PERIOD_MONTHLY = 4;
+  QUOTA_PERIOD_LIFETIME = 5;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Streaming
+// ─────────────────────────────────────────────────────────────────────────────
+
+message StreamEventsRequest {
+  // Organization to stream events for (required).
+  string organization_id = 1;
+
+  // Filter by event types (empty = all types).
+  repeated UsageEventType event_types = 2;
+
+  // Filter by metric codes (empty = all codes).
+  repeated string metric_codes = 3;
+
+  // Start streaming from this timestamp (optional).
+  google.protobuf.Timestamp since = 4;
+}

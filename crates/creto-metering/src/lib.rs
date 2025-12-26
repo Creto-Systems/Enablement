@@ -28,20 +28,32 @@
 //! └─────────────────────────────────────────────────────────────────┘
 //! ```
 //!
+//! ## Week 3 Features
+//!
+//! - **Validation**: Comprehensive event validation with configurable rules
+//! - **Deduplication**: Redis-backed idempotency with local fallback
+//! - **gRPC Service**: High-performance ingestion service
+//! - **Benchmarks**: Target >10K events/sec throughput
+//!
 //! ## Pattern Source
 //!
 //! Inspired by [Lago](https://github.com/getlago/lago) event ingestion patterns,
 //! rebuilt with Creto Sovereign primitives (NHI, Cedar authorization, audit logging).
 
 pub mod aggregation;
+pub mod dedup;
 pub mod events;
+pub mod grpc;
 pub mod invoice;
 pub mod pricing;
 pub mod quota;
 pub mod repository;
 pub mod service;
+pub mod validation;
 
+pub use dedup::{DedupConfig, DedupResult, Deduplicator};
 pub use events::{UsageEvent, UsageEventType};
+pub use grpc::{MeteringGrpcService, MeteringServiceConfig};
 pub use quota::{Quota, QuotaEnforcer, QuotaPeriod};
 pub use repository::{
     EventRepository, PgEventRepository,
@@ -49,3 +61,4 @@ pub use repository::{
     InvoiceRepository, PgInvoiceRepository, InvoiceRecord,
 };
 pub use service::MeteringService;
+pub use validation::{BatchValidationResult, EventValidator, ValidationConfig, ValidationError};

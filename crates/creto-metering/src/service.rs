@@ -4,7 +4,7 @@ use creto_common::{AgentId, CretoResult, OrganizationId};
 
 use crate::{
     aggregation::AggregationEngine,
-    events::{UsageEvent, LocalEventIngestion},
+    events::UsageEvent,
     invoice::InvoiceGenerator,
     pricing::PricingEngine,
     quota::QuotaEnforcer,
