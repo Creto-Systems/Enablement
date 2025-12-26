@@ -93,6 +93,16 @@ pub struct PricingTier {
 }
 
 impl PricingModel {
+    /// Calculate the effective unit price for a given usage amount.
+    /// For tiered pricing, this is the average price per unit.
+    pub fn calculate_unit_price(&self, usage: i64) -> Money {
+        if usage == 0 {
+            return Money::usd(0);
+        }
+        let total = self.calculate(usage);
+        Money::usd(total.amount / usage)
+    }
+
     /// Calculate the total cost for a given usage amount.
     pub fn calculate(&self, usage: i64) -> Money {
         let cents = match &self.strategy {

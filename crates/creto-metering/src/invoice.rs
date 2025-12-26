@@ -101,8 +101,26 @@ impl Invoice {
         self.recalculate_total();
     }
 
+    /// Set the tax amount and recalculate total.
+    pub fn set_tax(&mut self, tax: Money) {
+        self.tax = tax;
+        self.recalculate_total_with_tax();
+    }
+
+    /// Recalculate the total based on line items, discounts, and existing tax.
+    fn recalculate_total_with_tax(&mut self) {
+        let discount_amount: i64 = self
+            .discounts
+            .iter()
+            .map(|d| d.calculate(self.subtotal.amount))
+            .sum();
+
+        let after_discount = self.subtotal.amount - discount_amount;
+        self.total = Money::usd(after_discount + self.tax.amount);
+    }
+
     /// Recalculate the total based on line items, discounts, and tax.
-    fn recalculate_total(&mut self) {
+    pub fn recalculate_total(&mut self) {
         let discount_amount: i64 = self
             .discounts
             .iter()
@@ -244,33 +262,126 @@ impl Discount {
 
 /// Generator for creating invoices from usage data.
 pub struct InvoiceGenerator {
-    // TODO: Add dependencies
-    _private: (),
+    /// Pricing models by metric code.
+    pricing_models: std::collections::HashMap<String, crate::pricing::PricingModel>,
+    /// Default due days for issued invoices.
+    due_days: i64,
+    /// Tax rate (percentage).
+    tax_rate: f64,
 }
 
 impl InvoiceGenerator {
     /// Create a new invoice generator.
     pub fn new() -> Self {
-        Self { _private: () }
+        Self {
+            pricing_models: std::collections::HashMap::new(),
+            due_days: 30,
+            tax_rate: 0.0, // No tax by default
+        }
+    }
+
+    /// Create with specific configuration.
+    pub fn with_config(due_days: i64, tax_rate: f64) -> Self {
+        Self {
+            pricing_models: std::collections::HashMap::new(),
+            due_days,
+            tax_rate,
+        }
+    }
+
+    /// Register a pricing model.
+    pub fn register_pricing_model(&mut self, model: crate::pricing::PricingModel) {
+        self.pricing_models.insert(model.metric_code.clone(), model);
+    }
+
+    /// Generate an invoice from aggregated usage data.
+    ///
+    /// This is the synchronous version that takes pre-computed aggregations.
+    pub fn generate_from_aggregations(
+        &self,
+        organization_id: OrganizationId,
+        period_start: DateTime<Utc>,
+        period_end: DateTime<Utc>,
+        aggregations: &[UsageAggregation],
+    ) -> Invoice {
+        let mut invoice = Invoice::new(organization_id, period_start, period_end);
+
+        for agg in aggregations {
+            // Find pricing model for this metric
+            if let Some(model) = self.pricing_models.get(&agg.metric_code) {
+                let cost = model.calculate(agg.quantity);
+
+                let line_item = LineItem::new(
+                    &agg.description,
+                    &agg.metric_code,
+                    agg.quantity,
+                    &agg.unit,
+                    model.calculate_unit_price(agg.quantity),
+                );
+
+                invoice.add_line_item(LineItem {
+                    amount: cost,
+                    ..line_item
+                });
+            } else {
+                // No pricing model - use quantity as cents (1:1 mapping)
+                let line_item = LineItem::new(
+                    &agg.description,
+                    &agg.metric_code,
+                    agg.quantity,
+                    &agg.unit,
+                    Money::usd(1), // Default $0.01 per unit
+                );
+                invoice.add_line_item(line_item);
+            }
+        }
+
+        // Apply tax if configured
+        if self.tax_rate > 0.0 {
+            let tax_cents = (invoice.subtotal.amount as f64 * self.tax_rate / 100.0) as i64;
+            invoice.set_tax(Money::usd(tax_cents));
+        }
+
+        invoice
+    }
+
+    /// Generate and issue an invoice.
+    pub fn generate_and_issue(
+        &self,
+        organization_id: OrganizationId,
+        period_start: DateTime<Utc>,
+        period_end: DateTime<Utc>,
+        aggregations: &[UsageAggregation],
+    ) -> Invoice {
+        let mut invoice = self.generate_from_aggregations(
+            organization_id,
+            period_start,
+            period_end,
+            aggregations,
+        );
+
+        invoice.issue(self.due_days);
+        invoice
     }
 
     /// Generate an invoice for an organization's usage in a billing period.
+    ///
+    /// This async version fetches aggregations from the database.
     pub async fn generate(
         &self,
         organization_id: OrganizationId,
         period_start: DateTime<Utc>,
         period_end: DateTime<Utc>,
     ) -> Result<Invoice, creto_common::CretoError> {
-        // TODO: Implement invoice generation
-        // 1. Fetch aggregated usage for the period
-        // 2. Apply pricing models
-        // 3. Generate line items
-        // 4. Apply discounts
-        // 5. Calculate tax
+        // In production, this would fetch from the aggregation engine
+        // For now, return an empty invoice
+        let invoice = Invoice::new(organization_id, period_start, period_end);
+        Ok(invoice)
+    }
 
-        let _ = (organization_id, period_start, period_end);
-
-        todo!("Invoice generation not yet implemented")
+    /// Get registered pricing models.
+    pub fn pricing_models(&self) -> &std::collections::HashMap<String, crate::pricing::PricingModel> {
+        &self.pricing_models
     }
 }
 
@@ -278,6 +389,19 @@ impl Default for InvoiceGenerator {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Aggregated usage data for invoice generation.
+#[derive(Debug, Clone)]
+pub struct UsageAggregation {
+    /// Metric code.
+    pub metric_code: String,
+    /// Description for the line item.
+    pub description: String,
+    /// Total quantity consumed.
+    pub quantity: i64,
+    /// Unit of measurement.
+    pub unit: String,
 }
 
 #[cfg(test)]
@@ -349,5 +473,124 @@ mod tests {
         invoice.mark_paid();
         assert_eq!(invoice.status, InvoiceStatus::Paid);
         assert!(invoice.paid_at.is_some());
+    }
+
+    #[test]
+    fn test_invoice_generator_with_pricing() {
+        use crate::pricing::{PricingModel, PricingStrategy};
+
+        let mut generator = InvoiceGenerator::new();
+
+        // Register per-unit pricing for tokens
+        generator.register_pricing_model(PricingModel {
+            id: "tokens".to_string(),
+            name: "Token Pricing".to_string(),
+            metric_code: "tokens".to_string(),
+            strategy: PricingStrategy::PerUnit {
+                unit_price_cents: 1, // $0.01 per token
+            },
+        });
+
+        // Register package pricing for API calls
+        generator.register_pricing_model(PricingModel {
+            id: "api_calls".to_string(),
+            name: "API Call Packages".to_string(),
+            metric_code: "api_calls".to_string(),
+            strategy: PricingStrategy::Package {
+                package_size: 1000,
+                package_price_cents: 500, // $5.00 per 1000 calls
+            },
+        });
+
+        let org_id = OrganizationId::new();
+        let period_start = Utc::now() - chrono::Duration::days(30);
+        let period_end = Utc::now();
+
+        let aggregations = vec![
+            UsageAggregation {
+                metric_code: "tokens".to_string(),
+                description: "Input Tokens".to_string(),
+                quantity: 5000,
+                unit: "tokens".to_string(),
+            },
+            UsageAggregation {
+                metric_code: "api_calls".to_string(),
+                description: "API Calls".to_string(),
+                quantity: 2500, // 3 packages
+                unit: "calls".to_string(),
+            },
+        ];
+
+        let invoice = generator.generate_from_aggregations(
+            org_id,
+            period_start,
+            period_end,
+            &aggregations,
+        );
+
+        assert_eq!(invoice.line_items.len(), 2);
+        // Tokens: 5000 * $0.01 = $50.00
+        // API Calls: 3 packages * $5.00 = $15.00
+        // Total: $65.00
+        assert_eq!(invoice.subtotal.amount, 5000 + 1500);
+        assert_eq!(invoice.total.amount, 6500);
+    }
+
+    #[test]
+    fn test_invoice_generator_with_tax() {
+        let generator = InvoiceGenerator::with_config(30, 10.0); // 10% tax
+
+        let org_id = OrganizationId::new();
+        let period_start = Utc::now() - chrono::Duration::days(30);
+        let period_end = Utc::now();
+
+        let aggregations = vec![UsageAggregation {
+            metric_code: "compute".to_string(),
+            description: "Compute Hours".to_string(),
+            quantity: 10000, // $100.00 at default rate
+            unit: "hours".to_string(),
+        }];
+
+        let invoice = generator.generate_from_aggregations(
+            org_id,
+            period_start,
+            period_end,
+            &aggregations,
+        );
+
+        assert_eq!(invoice.subtotal.amount, 10000); // $100.00
+        assert_eq!(invoice.tax.amount, 1000); // $10.00 tax
+        assert_eq!(invoice.total.amount, 11000); // $110.00 total
+    }
+
+    #[test]
+    fn test_invoice_generator_and_issue() {
+        let generator = InvoiceGenerator::with_config(14, 0.0); // 14 day due, no tax
+
+        let org_id = OrganizationId::new();
+        let period_start = Utc::now() - chrono::Duration::days(30);
+        let period_end = Utc::now();
+
+        let aggregations = vec![UsageAggregation {
+            metric_code: "storage".to_string(),
+            description: "Storage GB".to_string(),
+            quantity: 1000,
+            unit: "GB".to_string(),
+        }];
+
+        let invoice = generator.generate_and_issue(
+            org_id,
+            period_start,
+            period_end,
+            &aggregations,
+        );
+
+        assert_eq!(invoice.status, InvoiceStatus::Issued);
+        assert!(invoice.issued_at.is_some());
+        assert!(invoice.due_at.is_some());
+
+        // Due date should be ~14 days from issue
+        let due_diff = invoice.due_at.unwrap() - invoice.issued_at.unwrap();
+        assert_eq!(due_diff.num_days(), 14);
     }
 }

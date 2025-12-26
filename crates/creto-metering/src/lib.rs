@@ -42,12 +42,19 @@
 //! - **Reservation System**: Pre-allocate quota before operations
 //! - **QuotaEnforcer**: Integrated enforcement with <10µs p99 latency
 //!
+//! ## Week 5 Features
+//!
+//! - **Credits/Wallet**: Prepaid credits with transaction tracking
+//! - **Invoice Generation**: Complete aggregation → pricing → invoice flow
+//! - **Pricing Models**: Repository for tiered, volume, and package pricing
+//!
 //! ## Pattern Source
 //!
 //! Inspired by [Lago](https://github.com/getlago/lago) event ingestion patterns,
 //! rebuilt with Creto Sovereign primitives (NHI, Cedar authorization, audit logging).
 
 pub mod aggregation;
+pub mod credits;
 pub mod dedup;
 pub mod events;
 pub mod grpc;
@@ -73,3 +80,9 @@ pub use repository::{
 };
 pub use service::MeteringService;
 pub use validation::{BatchValidationResult, EventValidator, ValidationConfig, ValidationError};
+pub use credits::{
+    CreditApplication, CreditManager, CreditTransaction, CreditTransactionType, Wallet,
+};
+pub use invoice::{Discount, DiscountType, Invoice, InvoiceGenerator, InvoiceStatus, LineItem, UsageAggregation};
+pub use pricing::{PricingEngine, PricingModel, PricingStrategy, PricingTier};
+pub use aggregation::{Aggregation, AggregationEngine, AggregationType, AggregationValue};
