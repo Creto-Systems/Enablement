@@ -222,6 +222,179 @@ oss_reference: kubernetes-sigs/agent-sandbox
 
 ---
 
+#### T-009: Prompt Injection Attack
+
+**Description**: Malicious input in agent prompts causes the LLM to execute unintended actions or leak sensitive information.
+
+**Attack Vector**:
+1. Agent receives user input containing injection payload
+2. Payload instructs LLM to ignore previous instructions
+3. LLM reveals system prompts, executes unauthorized actions, or exfiltrates data
+
+**Mitigations**:
+- **Input Sanitization**: Filter known injection patterns before LLM call
+- **Output Validation**: Validate LLM responses against expected schema
+- **Privilege Separation**: LLM cannot directly execute sensitive operations
+- **Prompt Hardening**: System prompts with explicit boundaries
+- **Monitoring**: Detect anomalous LLM outputs
+
+**Residual Risk**: Medium (LLMs are inherently susceptible)
+
+---
+
+#### T-010: Model Poisoning (Air-Gap)
+
+**Description**: Attacker compromises local model weights to inject backdoors or biased outputs.
+
+**Attack Vector**:
+1. Attacker gains access to model storage or update mechanism
+2. Modifies model weights with malicious perturbations
+3. Poisoned model produces attacker-desired outputs on trigger inputs
+
+**Mitigations**:
+- **Model Provenance**: Verify cryptographic signatures on model weights
+- **Checksum Validation**: SHA-256 hash verification on load
+- **Dual-Person Control**: Model updates require two authorized personnel
+- **Behavioral Testing**: Run test suite before deploying new models
+- **Air-Gap Updates**: Signed bundles via data diode, no network
+
+**Residual Risk**: Low (with proper verification)
+
+---
+
+#### T-011: Inference Data Exfiltration
+
+**Description**: Sensitive data in prompts or responses leaks to unauthorized parties.
+
+**Attack Vector**:
+1. Cloud mode: Data sent to cloud provider (acceptable risk if authorized)
+2. Air-gap mode: Insider captures inference logs containing sensitive data
+3. Hybrid mode: Misrouted request sends classified data to cloud
+
+**Mitigations**:
+- **Classification-Based Routing**: Classified data forced to local inference
+- **PII Detection**: Scan prompts for PII before cloud routing
+- **Audit Logging**: Log all inference metadata (not content)
+- **Encryption in Transit**: TLS 1.3 for all inference calls
+- **Provider Agreements**: DPA with cloud providers for data handling
+
+**Residual Risk**: Medium (cloud), Low (air-gap)
+
+---
+
+#### T-012: Model Denial of Service
+
+**Description**: Attacker exhausts inference capacity, preventing legitimate agent operations.
+
+**Attack Vector**:
+1. Flood inference endpoint with high-token requests
+2. Exhaust GPU memory with concurrent long-context requests
+3. Rate limit cloud provider, blocking all inference
+
+**Mitigations**:
+- **Token Quotas**: Per-agent token budget (via Metering integration)
+- **Request Queuing**: Priority queues with timeout
+- **Rate Limiting**: Per-sandbox request limits
+- **Multi-Provider Failover**: Cloud mode uses multiple providers
+- **Resource Isolation**: Dedicated GPU allocation per tenant (air-gap)
+
+**Residual Risk**: Low (with proper quotas)
+
+---
+
+#### T-013: Inference API Key Theft
+
+**Description**: Cloud provider API keys stolen, used for unauthorized inference or billing fraud.
+
+**Attack Vector**:
+1. Keys exposed in logs, environment variables, or code
+2. Attacker uses keys outside of Creto Runtime
+3. Significant cloud bills, potential data access
+
+**Mitigations**:
+- **Secret Injection**: Keys injected via NHI, never in code
+- **Key Rotation**: Automatic 30-day rotation
+- **Usage Monitoring**: Alert on usage anomalies
+- **IP Allowlisting**: Cloud provider restricts to known IPs
+- **Scoped Keys**: Minimal permissions per key
+
+**Residual Risk**: Low (with proper key management)
+
+---
+
+## Inference Security Controls
+
+### Defense in Depth for Inference
+
+| Layer | Control | Purpose |
+|-------|---------|---------|
+| **Input** | Prompt sanitization | Block injection patterns |
+| **Routing** | Classification-based routing | Classified data stays local |
+| **Transport** | TLS 1.3 | Encryption in transit |
+| **Provider** | API key rotation | Limit blast radius of theft |
+| **Output** | Response validation | Detect anomalous outputs |
+| **Audit** | Request/response logging | Forensics, compliance |
+
+### Model Verification (Air-Gap)
+
+```rust
+pub async fn verify_model_integrity(
+    model_path: &Path,
+    expected_hash: &Hash,
+    signature: &Signature,
+    public_key: &VerifyingKey,
+) -> Result<(), SecurityError> {
+    // 1. Compute SHA-256 of model weights
+    let actual_hash = compute_file_hash(model_path)?;
+
+    if actual_hash != *expected_hash {
+        return Err(SecurityError::ModelTampered {
+            expected: expected_hash.clone(),
+            actual: actual_hash,
+        });
+    }
+
+    // 2. Verify signature on hash
+    public_key.verify(expected_hash.as_bytes(), signature)?;
+
+    Ok(())
+}
+```
+
+### Prompt Injection Detection
+
+```rust
+pub struct PromptInjectionDetector {
+    patterns: Vec<Regex>,
+    ml_classifier: Option<InjectionClassifier>,
+}
+
+impl PromptInjectionDetector {
+    pub fn scan(&self, prompt: &str) -> InjectionRisk {
+        // 1. Pattern matching for known injections
+        for pattern in &self.patterns {
+            if pattern.is_match(prompt) {
+                return InjectionRisk::High {
+                    matched_pattern: pattern.as_str().to_string(),
+                };
+            }
+        }
+
+        // 2. ML-based detection (if available)
+        if let Some(classifier) = &self.ml_classifier {
+            let score = classifier.predict(prompt);
+            if score > 0.8 {
+                return InjectionRisk::Medium { score };
+            }
+        }
+
+        InjectionRisk::Low
+    }
+}
+```
+
+---
+
 ## Isolation Architecture
 
 ### gVisor Isolation Model

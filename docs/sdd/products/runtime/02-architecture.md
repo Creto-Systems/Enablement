@@ -1322,6 +1322,238 @@ impl SandboxManager {
 
 ---
 
+## 9. Inference Layer Integration
+
+### 9.1 Component Overview
+
+The Runtime integrates with an Inference Layer that provides unified access to AI models regardless of deployment mode (cloud, air-gapped, or hybrid).
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    creto-runtime                                │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │              Existing Components                          │  │
+│  │  SandboxManager | WarmPoolManager | EgressController      │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │              NEW: InferenceProxy                          │  │
+│  │  ┌─────────────────┐  ┌─────────────────────────────────┐ │  │
+│  │  │ InferenceRouter │  │ RequestInterceptor              │ │  │
+│  │  │ (mode-aware)    │  │ (audit, metering, policy)       │ │  │
+│  │  └─────────────────┘  └─────────────────────────────────┘ │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │                                  │
+│          ┌───────────────────┼───────────────────┐              │
+│          ↓                   ↓                   ↓              │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐        │
+│  │    Cloud     │   │   Air-Gap    │   │   Hybrid     │        │
+│  │   Providers  │   │    Local     │   │   Router     │        │
+│  └──────────────┘   └──────────────┘   └──────────────┘        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 9.2 InferenceProxy Component
+
+```rust
+/// Proxy for all inference requests from sandboxes
+pub struct InferenceProxy {
+    /// Mode-aware router
+    router: InferenceRouter,
+
+    /// Request interceptor for cross-cutting concerns
+    interceptor: RequestInterceptor,
+
+    /// Configuration
+    config: InferenceConfig,
+}
+
+impl InferenceProxy {
+    /// Handle inference request from sandbox
+    pub async fn handle_request(
+        &self,
+        sandbox_id: &SandboxId,
+        request: InferenceRequest,
+    ) -> Result<InferenceResponse, InferenceError> {
+        // 1. Validate request origin (sandbox must be running)
+        self.validate_sandbox(sandbox_id).await?;
+
+        // 2. Apply request interceptor (audit, quota check, policy)
+        let request = self.interceptor.pre_process(sandbox_id, request).await?;
+
+        // 3. Route to appropriate provider
+        let response = self.router.route(request).await?;
+
+        // 4. Post-process (audit, metering)
+        let response = self.interceptor.post_process(sandbox_id, response).await?;
+
+        Ok(response)
+    }
+}
+```
+
+### 9.3 RequestInterceptor
+
+Handles cross-cutting concerns for all inference requests:
+
+```rust
+pub struct RequestInterceptor {
+    audit: AuditIntegration,
+    metering: MeteringIntegration,
+    authz: AuthzIntegration,
+}
+
+impl RequestInterceptor {
+    pub async fn pre_process(
+        &self,
+        sandbox_id: &SandboxId,
+        request: InferenceRequest,
+    ) -> Result<InferenceRequest, InferenceError> {
+        // 1. Audit log the request (no prompt content, just metadata)
+        self.audit.log(AuditRecord {
+            what: "inference_request",
+            resource: format!("sandbox:{}", sandbox_id),
+            metadata: json!({
+                "model": request.model,
+                "input_tokens_estimate": request.estimate_input_tokens(),
+            }),
+            ..Default::default()
+        }).await?;
+
+        // 2. Check quota (token budget)
+        let decision = self.authz.check(
+            sandbox_id.agent_nhi(),
+            "inference",
+            &format!("model:{}", request.model),
+        ).await?;
+
+        match decision {
+            Decision::QuotaExceeded { .. } => {
+                return Err(InferenceError::QuotaExceeded);
+            }
+            Decision::Deny { reason } => {
+                return Err(InferenceError::Denied(reason));
+            }
+            _ => {}
+        }
+
+        Ok(request)
+    }
+
+    pub async fn post_process(
+        &self,
+        sandbox_id: &SandboxId,
+        response: InferenceResponse,
+    ) -> Result<InferenceResponse, InferenceError> {
+        // 1. Record usage for metering
+        self.metering.record_event(BillableEvent {
+            agent_nhi: sandbox_id.agent_nhi().clone(),
+            code: "inference_tokens",
+            properties: json!({
+                "model": response.model,
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+                "provider": response.provider,
+            }),
+            ..Default::default()
+        }).await?;
+
+        // 2. Audit completion
+        self.audit.log(AuditRecord {
+            what: "inference_response",
+            resource: format!("sandbox:{}", sandbox_id),
+            metadata: json!({
+                "model": response.model,
+                "tokens": response.usage.total_tokens,
+                "latency_ms": response.latency_ms,
+            }),
+            ..Default::default()
+        }).await?;
+
+        Ok(response)
+    }
+}
+```
+
+### 9.4 EgressController Integration
+
+For cloud mode, inference requests go through EgressController:
+
+```rust
+impl EgressController {
+    pub async fn check_inference_egress(
+        &self,
+        sandbox_id: &SandboxId,
+        provider: &ProviderId,
+    ) -> Result<EgressDecision, Error> {
+        match &self.inference_mode {
+            InferenceMode::AirGapped { .. } => {
+                // Local inference, no egress
+                Ok(EgressDecision::LocalOnly)
+            }
+            InferenceMode::Cloud { allowed_providers, .. } => {
+                if allowed_providers.contains(provider) {
+                    let endpoint = provider.endpoint();
+                    self.check_egress(sandbox_id, &endpoint).await
+                } else {
+                    Err(Error::ProviderNotAllowed(provider.clone()))
+                }
+            }
+            InferenceMode::Hybrid { policy, .. } => {
+                // Evaluate hybrid policy to determine routing
+                self.evaluate_hybrid_policy(sandbox_id, policy).await
+            }
+        }
+    }
+}
+```
+
+### 9.5 Sandbox SDK Integration
+
+Agents in sandboxes access inference via SDK:
+
+```python
+# Python SDK for agents
+from creto_runtime import InferenceClient
+
+client = InferenceClient()  # Connects to InferenceProxy
+
+response = await client.complete(
+    model="auto",  # Let router choose
+    messages=[
+        {"role": "user", "content": "Analyze this data..."}
+    ],
+    max_tokens=4096,
+)
+
+# Streaming
+async for chunk in client.complete_stream(...):
+    print(chunk.text, end="")
+```
+
+### 9.6 Configuration
+
+```toml
+[runtime.inference]
+mode = "hybrid"
+
+[runtime.inference.cloud]
+providers = ["anthropic", "azure", "bedrock"]
+routing_policy = "cost_optimized"
+
+[runtime.inference.local]
+enabled = true
+server = "http://vllm.internal:8000"
+models = ["llama-3.1-70b-instruct"]
+
+[runtime.inference.hybrid]
+policy = "classification_based"
+classified_to_local = true
+pii_to_local = true
+```
+
+---
+
 ## Revision History
 
 | Date | Version | Author | Changes |

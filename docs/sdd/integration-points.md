@@ -1098,9 +1098,202 @@ impl HealthCheck for StorageHealthCheck {
 
 ---
 
-## 3. Error Handling Patterns
+## 3. Inference Layer Integration
 
-### 3.1 Error Categorization
+### 3.1 InferenceProvider Trait
+
+**Purpose**: Unified abstraction for AI model inference across cloud providers and local air-gapped deployments.
+
+#### 3.1.1 Trait Definition
+
+```rust
+use async_trait::async_trait;
+use tokio_stream::Stream;
+
+/// Unified inference provider abstraction
+#[async_trait]
+pub trait InferenceProvider: Send + Sync {
+    /// Provider identifier
+    fn id(&self) -> ProviderId;
+
+    /// Capabilities this provider supports
+    fn capabilities(&self) -> &ProviderCapabilities;
+
+    /// Execute completion request
+    async fn complete(
+        &self,
+        request: CompletionRequest,
+    ) -> Result<CompletionResponse, InferenceError>;
+
+    /// Stream completion (for long responses)
+    async fn complete_stream(
+        &self,
+        request: CompletionRequest,
+    ) -> Result<Box<dyn Stream<Item = Result<CompletionChunk, InferenceError>> + Send>, InferenceError>;
+
+    /// Generate embeddings
+    async fn embed(&self, texts: &[String]) -> Result<Vec<Embedding>, InferenceError>;
+
+    /// Health status
+    async fn health(&self) -> HealthStatus;
+}
+
+#[derive(Debug, Clone)]
+pub struct CompletionRequest {
+    pub model: ModelId,
+    pub messages: Vec<Message>,
+    pub max_tokens: u32,
+    pub temperature: f32,
+    pub stop_sequences: Vec<String>,
+    pub metadata: RequestMetadata,
+}
+
+#[derive(Debug, Clone)]
+pub struct RequestMetadata {
+    pub sandbox_id: SandboxId,
+    pub agent_nhi: AgentIdentity,
+    pub trace_id: TraceId,
+    pub classification: Option<DataClassification>,
+}
+```
+
+#### 3.1.2 Error Types
+
+```rust
+#[derive(Debug, thiserror::Error)]
+pub enum InferenceError {
+    #[error("Provider unavailable: {0}")]
+    ProviderUnavailable(ProviderId),
+
+    #[error("Model not found: {0}")]
+    ModelNotFound(ModelId),
+
+    #[error("Request timeout after {0:?}")]
+    Timeout(Duration),
+
+    #[error("Rate limited, retry after {0:?}")]
+    RateLimited(Duration),
+
+    #[error("Token limit exceeded: {used} > {limit}")]
+    TokenLimitExceeded { used: u32, limit: u32 },
+
+    #[error("Prompt injection detected: {risk:?}")]
+    PromptInjection { risk: InjectionRisk },
+
+    #[error("Provider error: {0}")]
+    ProviderError(String),
+
+    #[error("Content filtered: {reason}")]
+    ContentFiltered { reason: String },
+
+    #[error("Not supported: {0}")]
+    NotSupported(String),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
+
+impl InferenceError {
+    pub fn is_retryable(&self) -> bool {
+        matches!(self,
+            Self::ProviderUnavailable(_) |
+            Self::Timeout(_) |
+            Self::RateLimited(_)
+        )
+    }
+}
+```
+
+#### 3.1.3 Provider Implementations
+
+| Provider | Type | Models | Integration |
+|----------|------|--------|-------------|
+| **AnthropicProvider** | Cloud | Claude 3.5, Claude 4 | `anthropic-rs` SDK |
+| **AzureOpenAIProvider** | Cloud | GPT-4o, GPT-4 | `azure-openai-rs` |
+| **BedrockProvider** | Cloud | Claude, Llama, Titan | AWS SDK |
+| **VertexAIProvider** | Cloud | Gemini Pro, PaLM | GCP SDK |
+| **OpenAIProvider** | Cloud | GPT-4o, o1 | `async-openai` |
+| **LocalInferenceProvider** | Local | Llama 3.1, Qwen, Mistral | vLLM/TGI/Ollama |
+
+#### 3.1.4 Usage by Enablement Crates
+
+| Crate | Inference Usage | Use Case |
+|-------|-----------------|----------|
+| **Metering** | None (may meter inference tokens) | N/A |
+| **Oversight** | Optional (AI-assisted approval decisions) | Context enrichment |
+| **Runtime** | Primary consumer | Agent sandbox inference |
+| **Messaging** | None | N/A |
+
+#### 3.1.5 Routing Policy
+
+```rust
+pub enum RoutingPolicy {
+    /// Always use cloud providers (default for connected environments)
+    CloudFirst { fallback_to_local: bool },
+
+    /// Always use local inference (air-gapped mode)
+    LocalOnly,
+
+    /// Route based on data classification
+    ClassificationBased {
+        local_classifications: Vec<DataClassification>,
+    },
+
+    /// Cost-optimized routing
+    CostOptimized { max_cost_per_token: Decimal },
+
+    /// Latency-optimized routing
+    LatencyOptimized { max_latency_ms: u64 },
+}
+```
+
+#### 3.1.6 Fallback Behavior
+
+| Failure Scenario | Fallback Behavior | Rationale |
+|------------------|-------------------|-----------|
+| Cloud provider unavailable | Fall back to local (if configured) | Continue operation |
+| Local provider unavailable | Return error | Cannot proceed in air-gap |
+| Rate limited | Retry with backoff, then fallback | Respect provider limits |
+| Prompt injection detected | Block request, log audit | Security critical |
+| Timeout | Retry once, then fallback | Transient failure |
+
+#### 3.1.7 Health Check
+
+```rust
+pub struct InferenceHealthCheck {
+    router: Arc<InferenceRouter>,
+}
+
+impl HealthCheck for InferenceHealthCheck {
+    async fn check(&self) -> HealthStatus {
+        let mut healthy = 0;
+        let mut total = 0;
+
+        for provider in self.router.providers() {
+            total += 1;
+            if matches!(provider.health().await, HealthStatus::Healthy) {
+                healthy += 1;
+            }
+        }
+
+        match (healthy, total) {
+            (0, _) => HealthStatus::Unhealthy {
+                reason: "All inference providers unavailable".to_string(),
+            },
+            (h, t) if h < t => HealthStatus::Degraded {
+                reason: format!("{}/{} providers available", h, t),
+            },
+            _ => HealthStatus::Healthy,
+        }
+    }
+}
+```
+
+---
+
+## 4. Error Handling Patterns
+
+### 4.1 Error Categorization
 
 ```rust
 pub trait ErrorCategory {
@@ -1116,7 +1309,7 @@ pub enum ErrorType {
 }
 ```
 
-### 3.2 Error Mapping
+### 4.2 Error Mapping
 
 ```rust
 use creto_enablement_common::error::{Error, ErrorKind};
@@ -1199,7 +1392,7 @@ impl From<CryptoError> for Error {
 }
 ```
 
-### 3.3 Retry with Backoff
+### 4.3 Retry with Backoff
 
 ```rust
 pub async fn with_retry<F, T, E>(
@@ -1246,9 +1439,9 @@ impl Default for RetryConfig {
 
 ---
 
-## 4. Fallback Behaviors
+## 5. Fallback Behaviors
 
-### 4.1 Service Unavailability Matrix
+### 5.1 Service Unavailability Matrix
 
 | Service | Criticality | Fallback Strategy | Maximum Degradation |
 |---------|-------------|-------------------|---------------------|
@@ -1260,7 +1453,7 @@ impl Default for RetryConfig {
 | **Memory** | Low | Proceed without context | Missing context |
 | **Storage** | Medium | Error for writes, warn for reads | Temporary unavailability |
 
-### 4.2 Circuit Breaker Pattern
+### 5.2 Circuit Breaker Pattern
 
 ```rust
 pub struct CircuitBreaker<T> {
@@ -1348,9 +1541,9 @@ impl<T> CircuitBreaker<T> {
 
 ---
 
-## 5. Health Check Contracts
+## 6. Health Check Contracts
 
-### 5.1 Health Check Trait
+### 6.1 Health Check Trait
 
 ```rust
 pub trait HealthCheck: Send + Sync {
@@ -1373,7 +1566,7 @@ impl HealthStatus {
 }
 ```
 
-### 5.2 Composite Health Check
+### 6.2 Composite Health Check
 
 ```rust
 pub struct CompositeHealthCheck {
@@ -1414,7 +1607,7 @@ impl HealthReport {
 }
 ```
 
-### 5.3 Health Check HTTP Endpoint
+### 6.3 Health Check HTTP Endpoint
 
 ```rust
 #[get("/health")]
@@ -1434,9 +1627,9 @@ pub async fn health_check(
 
 ---
 
-## 6. Integration Configuration
+## 7. Integration Configuration
 
-### 6.1 Configuration Schema
+### 7.1 Configuration Schema
 
 ```toml
 # /etc/creto/enablement-integrations.toml
@@ -1495,7 +1688,7 @@ retry_max_attempts = 3
 
 ---
 
-## 7. Decisions
+## 8. Decisions
 
 | Decision | Rationale |
 |----------|-----------|
@@ -1509,7 +1702,7 @@ retry_max_attempts = 3
 
 ---
 
-## 8. Open Questions
+## 9. Open Questions
 
 1. Should we implement automatic fallback to secondary NHI instances?
 2. What's the maximum acceptable local audit buffer size before dropping events?
@@ -1518,8 +1711,9 @@ retry_max_attempts = 3
 
 ---
 
-## 9. Revision History
+## 10. Revision History
 
 | Date | Version | Author | Changes |
 |------|---------|--------|---------|
 | 2024-12-25 | 0.1 | Creto Team | Initial draft |
+| 2025-12-25 | 0.2 | Inference Architecture Agent | Added Section 3: Inference Layer Integration |
