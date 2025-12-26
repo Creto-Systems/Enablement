@@ -118,6 +118,8 @@ async fn test_policy_trigger_creates_request() {
         smtp_port: 587,
         from_address: "oversight@example.com".to_string(),
         reply_to: Some("compliance@example.com".to_string()),
+        dashboard_base_url: "https://dashboard.example.com".to_string(),
+        token_secret: "test-secret-key".to_string(),
     };
     let email = EmailChannel::new(email_config);
 
@@ -250,7 +252,7 @@ fn test_state_machine_with_checkpoints() {
         );
 
         assert!(result.is_ok());
-        assert_eq!(state_machine.current_status(), status);
+        assert_eq!(state_machine.current(), status);
     }
 
     // Verify history preserved across checkpoints
