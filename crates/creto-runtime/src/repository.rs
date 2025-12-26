@@ -34,7 +34,7 @@ impl SandboxState {
     }
 
     /// Parse from database string.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_db_str(s: &str) -> Self {
         match s {
             "creating" => SandboxState::Creating,
             "ready" => SandboxState::Ready,
@@ -62,7 +62,7 @@ impl ExecutionStatus {
     }
 
     /// Parse from database string.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_db_str(s: &str) -> Self {
         match s {
             "queued" => ExecutionStatus::Queued,
             "running" => ExecutionStatus::Running,
@@ -179,7 +179,7 @@ impl SandboxRepository for PgSandboxRepository {
             organization_id: OrganizationId::from_uuid(r.get::<Uuid, _>("organization_id")),
             agent_id: AgentId::from_uuid(r.get::<Uuid, _>("agent_id")),
             runtime: r.get("runtime"),
-            state: SandboxState::from_str(r.get::<&str, _>("state")),
+            state: SandboxState::parse_db_str(r.get::<&str, _>("state")),
             network_policy: r.get("network_policy"),
             created_at: r.get("created_at"),
             last_used_at: r.get("last_used_at"),
@@ -240,7 +240,7 @@ impl SandboxRepository for PgSandboxRepository {
                 organization_id: org_id,
                 agent_id: AgentId::from_uuid(r.get::<Uuid, _>("agent_id")),
                 runtime: r.get("runtime"),
-                state: SandboxState::from_str(r.get::<&str, _>("state")),
+                state: SandboxState::parse_db_str(r.get::<&str, _>("state")),
                 network_policy: r.get("network_policy"),
                 created_at: r.get("created_at"),
                 last_used_at: r.get("last_used_at"),
@@ -352,7 +352,7 @@ impl ExecutionRepository for PgExecutionRepository {
         Ok(row.map(|r| ExecutionRecord {
             id,
             sandbox_id: SandboxId::from_uuid(r.get::<Uuid, _>("sandbox_id")),
-            status: ExecutionStatus::from_str(r.get::<&str, _>("status")),
+            status: ExecutionStatus::parse_db_str(r.get::<&str, _>("status")),
             queued_at: r.get("queued_at"),
             started_at: r.get("started_at"),
             completed_at: r.get("completed_at"),
@@ -429,7 +429,7 @@ impl ExecutionRepository for PgExecutionRepository {
             .map(|r| ExecutionRecord {
                 id: r.get("id"),
                 sandbox_id,
-                status: ExecutionStatus::from_str(r.get::<&str, _>("status")),
+                status: ExecutionStatus::parse_db_str(r.get::<&str, _>("status")),
                 queued_at: r.get("queued_at"),
                 started_at: r.get("started_at"),
                 completed_at: r.get("completed_at"),
@@ -532,13 +532,13 @@ mod tests {
 
     #[test]
     fn test_sandbox_state_roundtrip() {
-        assert_eq!(SandboxState::from_str("creating"), SandboxState::Creating);
+        assert_eq!(SandboxState::parse_db_str("creating"), SandboxState::Creating);
         assert_eq!(SandboxState::Creating.as_str(), "creating");
     }
 
     #[test]
     fn test_execution_status_roundtrip() {
-        assert_eq!(ExecutionStatus::from_str("queued"), ExecutionStatus::Queued);
+        assert_eq!(ExecutionStatus::parse_db_str("queued"), ExecutionStatus::Queued);
         assert_eq!(ExecutionStatus::Queued.as_str(), "queued");
     }
 }

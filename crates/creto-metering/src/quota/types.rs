@@ -99,10 +99,12 @@ impl Quota {
 /// Time period for quota reset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum QuotaPeriod {
     /// Reset every hour.
     Hourly,
     /// Reset every day at midnight UTC.
+    #[default]
     Daily,
     /// Reset every week on Monday.
     Weekly,
@@ -112,11 +114,6 @@ pub enum QuotaPeriod {
     Lifetime,
 }
 
-impl Default for QuotaPeriod {
-    fn default() -> Self {
-        Self::Daily
-    }
-}
 
 impl QuotaPeriod {
     /// Calculate the start and end bounds for a period containing the given timestamp.

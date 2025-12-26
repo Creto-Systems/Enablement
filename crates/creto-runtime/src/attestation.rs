@@ -285,6 +285,8 @@ pub trait AttestationVerifier: Send + Sync {
 /// Mock attestation provider for testing.
 pub struct MockAttestationProvider {
     signing_key: Vec<u8>,
+    /// Kept for future verification implementation.
+    #[allow(dead_code)]
     verification_key: Vec<u8>,
 }
 

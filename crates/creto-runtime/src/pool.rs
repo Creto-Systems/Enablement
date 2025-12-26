@@ -8,7 +8,7 @@ use creto_common::CretoResult;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::sandbox::{Sandbox, SandboxConfig, SandboxId, SandboxState};
+use crate::sandbox::{Sandbox, SandboxId, SandboxState};
 
 /// Configuration for the warm pool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +65,7 @@ pub struct RuntimePoolConfig {
 
 /// Statistics about the warm pool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct PoolStats {
     /// Total sandboxes in pool.
     pub total: usize,
@@ -82,19 +83,6 @@ pub struct PoolStats {
     pub by_runtime: HashMap<String, RuntimePoolStats>,
 }
 
-impl Default for PoolStats {
-    fn default() -> Self {
-        Self {
-            total: 0,
-            ready: 0,
-            in_use: 0,
-            hits: 0,
-            misses: 0,
-            evictions: 0,
-            by_runtime: HashMap::new(),
-        }
-    }
-}
 
 /// Per-runtime statistics.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -326,6 +314,7 @@ impl WarmPool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sandbox::SandboxConfig;
 
     #[tokio::test]
     async fn test_pool_creation() {

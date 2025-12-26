@@ -30,7 +30,7 @@ impl SessionState {
     }
 
     /// Parse from database string.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_db_str(s: &str) -> Self {
         match s {
             "establishing" => SessionState::Establishing,
             "active" => SessionState::Active,
@@ -55,7 +55,7 @@ impl ChannelType {
     }
 
     /// Parse from database string.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_db_str(s: &str) -> Self {
         match s {
             "direct" => ChannelType::Direct,
             "queue" => ChannelType::Queue,
@@ -353,7 +353,7 @@ impl SessionRepository for PgSessionRepository {
             id: r.get("id"),
             local_agent_id,
             remote_agent_id,
-            state: SessionState::from_str(r.get::<&str, _>("state")),
+            state: SessionState::parse_db_str(r.get::<&str, _>("state")),
             created_at: r.get("created_at"),
             last_active_at: r.get("last_active_at"),
         }))
@@ -397,7 +397,7 @@ impl SessionRepository for PgSessionRepository {
                 id: r.get("id"),
                 local_agent_id: AgentId::from_uuid(r.get::<Uuid, _>("local_agent_id")),
                 remote_agent_id: AgentId::from_uuid(r.get::<Uuid, _>("remote_agent_id")),
-                state: SessionState::from_str(r.get::<&str, _>("state")),
+                state: SessionState::parse_db_str(r.get::<&str, _>("state")),
                 created_at: r.get("created_at"),
                 last_active_at: r.get("last_active_at"),
             })
@@ -635,7 +635,7 @@ impl ChannelRepository for PgChannelRepository {
             .map(|r| ChannelRecord {
                 id: r.get("id"),
                 organization_id: org_id,
-                channel_type: ChannelType::from_str(r.get::<&str, _>("channel_type")),
+                channel_type: ChannelType::parse_db_str(r.get::<&str, _>("channel_type")),
                 name: r.get("name"),
                 active: r.get("active"),
             })
@@ -665,13 +665,13 @@ mod tests {
 
     #[test]
     fn test_session_state_roundtrip() {
-        assert_eq!(SessionState::from_str("establishing"), SessionState::Establishing);
+        assert_eq!(SessionState::parse_db_str("establishing"), SessionState::Establishing);
         assert_eq!(SessionState::Establishing.as_str(), "establishing");
     }
 
     #[test]
     fn test_channel_type_roundtrip() {
-        assert_eq!(ChannelType::from_str("direct"), ChannelType::Direct);
+        assert_eq!(ChannelType::parse_db_str("direct"), ChannelType::Direct);
         assert_eq!(ChannelType::Direct.as_str(), "direct");
     }
 }

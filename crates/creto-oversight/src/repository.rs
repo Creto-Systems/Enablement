@@ -32,7 +32,7 @@ impl RequestStatus {
     }
 
     /// Parse from database string.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_db_str(s: &str) -> Self {
         match s {
             "pending" => RequestStatus::Pending,
             "in_review" => RequestStatus::InReview,
@@ -58,7 +58,7 @@ impl Priority {
     }
 
     /// Parse from database string.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_db_str(s: &str) -> Self {
         match s {
             "low" => Priority::Low,
             "medium" => Priority::Normal,
@@ -82,7 +82,7 @@ impl ApprovalDecision {
     }
 
     /// Parse from database string.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse_db_str(s: &str) -> Self {
         match s {
             "approve" => ApprovalDecision::Approve,
             "reject" => ApprovalDecision::Reject,
@@ -190,8 +190,8 @@ impl RequestRepository for PgRequestRepository {
                     action_type,
                     description: r.get("description"),
                     context: r.get("context"),
-                    status: RequestStatus::from_str(r.get::<&str, _>("status")),
-                    priority: Priority::from_str(r.get::<&str, _>("priority")),
+                    status: RequestStatus::parse_db_str(r.get::<&str, _>("status")),
+                    priority: Priority::parse_db_str(r.get::<&str, _>("priority")),
                     created_at: r.get("created_at"),
                     updated_at: r.get("updated_at"),
                     timeout_seconds: 86400, // Default
@@ -256,8 +256,8 @@ impl RequestRepository for PgRequestRepository {
                 action_type,
                 description: r.get("description"),
                 context: r.get("context"),
-                status: RequestStatus::from_str(r.get::<&str, _>("status")),
-                priority: Priority::from_str(r.get::<&str, _>("priority")),
+                status: RequestStatus::parse_db_str(r.get::<&str, _>("status")),
+                priority: Priority::parse_db_str(r.get::<&str, _>("priority")),
                 created_at: r.get("created_at"),
                 updated_at: r.get("updated_at"),
                 timeout_seconds: 86400,
@@ -300,8 +300,8 @@ impl RequestRepository for PgRequestRepository {
                 action_type,
                 description: r.get("description"),
                 context: r.get("context"),
-                status: RequestStatus::from_str(r.get::<&str, _>("status")),
-                priority: Priority::from_str(r.get::<&str, _>("priority")),
+                status: RequestStatus::parse_db_str(r.get::<&str, _>("status")),
+                priority: Priority::parse_db_str(r.get::<&str, _>("priority")),
                 created_at: r.get("created_at"),
                 updated_at: r.get("updated_at"),
                 timeout_seconds: 86400,
@@ -416,7 +416,7 @@ impl ApprovalRepository for PgApprovalRepository {
                 id: r.get("id"),
                 request_id,
                 reviewer_id: UserId::from_uuid(r.get::<Uuid, _>("reviewer_id")),
-                decision: ApprovalDecision::from_str(r.get::<&str, _>("decision")),
+                decision: ApprovalDecision::parse_db_str(r.get::<&str, _>("decision")),
                 reason: r.get("reason"),
                 decided_at: r.get("decided_at"),
                 weight: r.get::<i32, _>("weight") as u32,
@@ -535,8 +535,8 @@ impl StateTransitionRepository for PgStateTransitionRepository {
             .map(|r| StateTransitionRecord {
                 id: r.get("id"),
                 request_id,
-                from_status: RequestStatus::from_str(r.get::<&str, _>("from_status")),
-                to_status: RequestStatus::from_str(r.get::<&str, _>("to_status")),
+                from_status: RequestStatus::parse_db_str(r.get::<&str, _>("from_status")),
+                to_status: RequestStatus::parse_db_str(r.get::<&str, _>("to_status")),
                 actor_type: r.get("actor_type"),
                 actor_id: r.get("actor_id"),
                 reason: r.get("reason"),
@@ -815,19 +815,19 @@ mod tests {
 
     #[test]
     fn test_request_status_roundtrip() {
-        assert_eq!(RequestStatus::from_str("pending"), RequestStatus::Pending);
+        assert_eq!(RequestStatus::parse_db_str("pending"), RequestStatus::Pending);
         assert_eq!(RequestStatus::Pending.as_str(), "pending");
     }
 
     #[test]
     fn test_priority_roundtrip() {
-        assert_eq!(Priority::from_str("high"), Priority::High);
+        assert_eq!(Priority::parse_db_str("high"), Priority::High);
         assert_eq!(Priority::High.as_str(), "high");
     }
 
     #[test]
     fn test_approval_decision_roundtrip() {
-        assert_eq!(ApprovalDecision::from_str("approve"), ApprovalDecision::Approve);
+        assert_eq!(ApprovalDecision::parse_db_str("approve"), ApprovalDecision::Approve);
         assert_eq!(ApprovalDecision::Approve.as_str(), "approve");
     }
 

@@ -39,12 +39,12 @@ impl BloomConfig {
         let m = self.calculate_bit_size() as f64;
         let n = self.expected_items as f64;
         let k = (m / n) * 2_f64.ln();
-        k.ceil().max(1.0).min(8.0) as u32
+        k.ceil().clamp(1.0, 8.0) as u32
     }
 
     /// Memory usage in bytes.
     pub fn memory_bytes(&self) -> usize {
-        (self.calculate_bit_size() + 63) / 64 * 8
+        self.calculate_bit_size().div_ceil(64) * 8
     }
 }
 
@@ -62,7 +62,7 @@ impl QuotaBloomFilter {
     pub fn new(config: BloomConfig) -> Self {
         let bit_size = config.calculate_bit_size();
         let num_hashes = config.calculate_num_hashes();
-        let num_words = (bit_size + 63) / 64;
+        let num_words = bit_size.div_ceil(64);
 
         let bits: Vec<AtomicU64> = (0..num_words)
             .map(|_| AtomicU64::new(0))

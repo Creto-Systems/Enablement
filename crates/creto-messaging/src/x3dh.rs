@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::keys::{IdentityKey, KeyBundle, PreKey, SignedPreKey};
+use crate::keys::{IdentityKey, KeyBundle, PreKey};
 
 /// Parameters for X3DH key agreement.
 #[derive(Debug, Clone, Serialize, Deserialize)]

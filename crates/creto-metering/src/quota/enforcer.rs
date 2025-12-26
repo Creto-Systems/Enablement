@@ -514,6 +514,8 @@ impl QuotaEnforcer {
         }
     }
 
+    /// Complex lookup with fallback requires these parameters.
+    #[allow(clippy::too_many_arguments)]
     fn lookup_quota_with_fallback(
         &self,
         agent_key: &str,

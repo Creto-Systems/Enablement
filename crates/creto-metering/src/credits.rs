@@ -217,7 +217,7 @@ impl CreditManager {
         let mut wallets = self.wallets.write().unwrap();
 
         wallets
-            .entry(organization_id.clone())
+            .entry(organization_id)
             .or_insert_with(|| Wallet::new(organization_id))
             .clone()
     }
@@ -238,8 +238,8 @@ impl CreditManager {
         let mut wallets = self.wallets.write().unwrap();
 
         let wallet = wallets
-            .entry(organization_id.clone())
-            .or_insert_with(|| Wallet::new(organization_id.clone()));
+            .entry(organization_id)
+            .or_insert_with(|| Wallet::new(organization_id));
 
         wallet.grant_credits(amount_cents)?;
 
@@ -282,7 +282,7 @@ impl CreditManager {
 
         let mut transaction = CreditTransaction::new(
             wallet.id,
-            organization_id.clone(),
+            *organization_id,
             CreditTransactionType::Consumption,
             -amount_cents, // Negative for consumption
             wallet.balance_cents,

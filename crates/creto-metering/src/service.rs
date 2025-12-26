@@ -61,6 +61,8 @@ pub struct MeteringService {
 #[derive(Debug, Clone)]
 struct UsageRecord {
     organization_id: OrganizationId,
+    /// Kept for per-agent billing breakdown.
+    #[allow(dead_code)]
     agent_id: AgentId,
     metric_code: String,
     quantity: i64,
@@ -295,7 +297,7 @@ impl MeteringService {
         period_start: DateTime<Utc>,
         period_end: DateTime<Utc>,
     ) -> (Invoice, CreditApplication) {
-        let mut invoice = self.generate_invoice(organization_id.clone(), period_start, period_end);
+        let mut invoice = self.generate_invoice(organization_id, period_start, period_end);
 
         // Apply credits
         let application = self
@@ -336,7 +338,7 @@ impl MeteringService {
 
         // 2. Generate invoice
         let mut invoice = self.invoice_generator.generate_from_aggregations(
-            organization_id.clone(),
+            organization_id,
             period_start,
             period_end,
             &aggregations,

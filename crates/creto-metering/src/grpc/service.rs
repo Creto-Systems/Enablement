@@ -368,7 +368,7 @@ impl<I: EventIngestion> MeteringGrpcService<I> {
             .as_ref()
             .and_then(|id| uuid::Uuid::parse_str(id).ok())
             .map(creto_common::AgentId::from_uuid)
-            .unwrap_or_else(creto_common::AgentId::new);
+            .unwrap_or_default();
 
         let org = creto_common::OrganizationId::from_uuid(org_id);
         let status = self

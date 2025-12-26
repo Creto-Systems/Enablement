@@ -130,8 +130,10 @@ impl Checkpoint {
 /// Compression algorithms supported for checkpoints.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum CompressionAlgorithm {
     /// No compression.
+    #[default]
     None,
     /// Gzip compression.
     Gzip,
@@ -141,11 +143,6 @@ pub enum CompressionAlgorithm {
     Lz4,
 }
 
-impl Default for CompressionAlgorithm {
-    fn default() -> Self {
-        Self::None
-    }
-}
 
 /// Configuration for creating checkpoints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -374,7 +371,7 @@ impl CheckpointManager for InMemoryCheckpointStore {
         let checkpoints = self.checkpoints.read().unwrap();
         let checkpoint = checkpoints
             .get(&checkpoint_id)
-            .ok_or_else(|| CheckpointError::NotFound { checkpoint_id })?;
+            .ok_or(CheckpointError::NotFound { checkpoint_id })?;
 
         tracing::debug!(
             checkpoint_id = %checkpoint_id,
@@ -420,7 +417,7 @@ impl CheckpointManager for InMemoryCheckpointStore {
         let mut checkpoints = self.checkpoints.write().unwrap();
         checkpoints
             .remove(&checkpoint_id)
-            .ok_or_else(|| CheckpointError::NotFound { checkpoint_id })?;
+            .ok_or(CheckpointError::NotFound { checkpoint_id })?;
 
         tracing::debug!(checkpoint_id = %checkpoint_id, "Checkpoint deleted");
         Ok(())

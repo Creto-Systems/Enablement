@@ -420,7 +420,7 @@ impl TopicManager {
         self.subscriptions.insert(sub_id, subscription.clone());
         self.topic_subscriptions
             .entry(topic_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(sub_id);
 
         tracing::info!(
@@ -508,7 +508,7 @@ impl TopicManager {
         };
 
         // Store message (apply retention)
-        let messages = self.topic_messages.entry(topic_id).or_insert_with(Vec::new);
+        let messages = self.topic_messages.entry(topic_id).or_default();
         messages.push(message);
 
         // Apply retention policy

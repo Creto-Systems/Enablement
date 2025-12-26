@@ -163,9 +163,9 @@ impl UsageEventBuilder {
             transaction_id: self.transaction_id
                 .unwrap_or_else(UsageEvent::generate_transaction_id),
             organization_id: self.organization_id
-                .unwrap_or_else(OrganizationId::new),
+                .unwrap_or_default(),
             agent_id: self.agent_id
-                .unwrap_or_else(AgentId::new),
+                .unwrap_or_default(),
             external_subscription_id: self.external_subscription_id,
             event_type,
             code: self.code.unwrap_or_else(|| event_type.default_code().to_string()),

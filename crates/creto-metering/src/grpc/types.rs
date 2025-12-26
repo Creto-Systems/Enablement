@@ -41,7 +41,9 @@ pub struct IngestEventBatchResponse {
 /// Status of an individual event ingestion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Default)]
 pub enum IngestStatus {
+    #[default]
     Unspecified,
     Accepted,
     Duplicate,
@@ -50,11 +52,6 @@ pub enum IngestStatus {
     InternalError,
 }
 
-impl Default for IngestStatus {
-    fn default() -> Self {
-        Self::Unspecified
-    }
-}
 
 /// Result for a specific event in a batch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,7 +119,9 @@ impl From<UsageEvent> for GrpcUsageEvent {
 /// gRPC event type enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(i32)]
+#[derive(Default)]
 pub enum GrpcUsageEventType {
+    #[default]
     Unspecified = 0,
     ApiCall = 1,
     LlmInference = 2,
@@ -140,11 +139,6 @@ pub enum GrpcUsageEventType {
     MessageSent = 42,
 }
 
-impl Default for GrpcUsageEventType {
-    fn default() -> Self {
-        Self::Unspecified
-    }
-}
 
 impl GrpcUsageEventType {
     pub fn to_internal(self) -> UsageEventType {
@@ -230,7 +224,9 @@ pub struct GetQuotaStatusResponse {
 /// gRPC quota period enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(i32)]
+#[derive(Default)]
 pub enum GrpcQuotaPeriod {
+    #[default]
     Unspecified = 0,
     Hourly = 1,
     Daily = 2,
@@ -239,11 +235,6 @@ pub enum GrpcQuotaPeriod {
     Lifetime = 5,
 }
 
-impl Default for GrpcQuotaPeriod {
-    fn default() -> Self {
-        Self::Unspecified
-    }
-}
 
 #[cfg(test)]
 mod tests {

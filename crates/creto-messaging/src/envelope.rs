@@ -127,8 +127,10 @@ impl EncryptedPayload {
 /// Content type for messages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ContentType {
     /// Plain text message.
+    #[default]
     Text,
     /// JSON structured data.
     Json,
@@ -144,11 +146,6 @@ pub enum ContentType {
     Control,
 }
 
-impl Default for ContentType {
-    fn default() -> Self {
-        ContentType::Text
-    }
-}
 
 /// Delivery receipt for a message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
