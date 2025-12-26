@@ -35,6 +35,7 @@
 
 pub mod approval;
 pub mod channels;
+pub mod checkpoint;
 pub mod context;
 pub mod metering;
 pub mod policy;
@@ -42,14 +43,22 @@ pub mod repository;
 pub mod request;
 pub mod service;
 pub mod state;
+pub mod triggers;
 
 pub use approval::{Approval, ApprovalDecision, QuorumConfig, QuorumCalculator, QuorumResult};
+pub use checkpoint::{Checkpoint, CheckpointManager, CheckpointRepository, CHECKPOINT_VERSION};
 pub use repository::{
     RequestRepository, PgRequestRepository,
     ApprovalRepository, PgApprovalRepository, ApprovalCounts,
     StateTransitionRepository, PgStateTransitionRepository, StateTransitionRecord,
     QuorumConfigRepository, PgQuorumConfigRepository, QuorumConfigRecord,
+    PgCheckpointRepository,
 };
 pub use request::{OversightRequest, RequestStatus, ActionType, Priority};
 pub use service::OversightService;
 pub use state::{StateMachine, StateTransition};
+pub use policy::{PolicyContext, PolicyDecision, TrustLevel};
+pub use triggers::{
+    PolicyTriggerConfig, TriggerCondition, PolicyEvaluator, TriggerMatch,
+    ActionTypePattern, TrustLevelThreshold, MockCedarClient,
+};

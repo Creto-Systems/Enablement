@@ -205,33 +205,42 @@ fn test_quota_enforcer_creation() {
     let _ = enforcer;
 }
 
-#[tokio::test]
-async fn test_quota_enforcer_check_allows() {
+#[test]
+fn test_quota_enforcer_check_allows() {
     let enforcer = QuotaEnforcer::new();
     let fixture = TestFixture::new();
 
-    // Default implementation allows all
+    // Default implementation allows all (no quota registered = fast_allow)
     let result = enforcer.check(
-        fixture.org_id,
-        fixture.agent_id,
+        &fixture.org_id,
+        &fixture.agent_id,
         "api_calls",
         10,
-    ).await;
+    );
 
     assert!(result.is_ok());
+    assert!(result.unwrap().allowed);
 }
 
-#[tokio::test]
-async fn test_quota_enforcer_get_status() {
+#[test]
+fn test_quota_enforcer_register_and_check() {
     let enforcer = QuotaEnforcer::new();
     let fixture = TestFixture::new();
 
-    let status = enforcer.get_status(
-        fixture.org_id,
-        fixture.agent_id,
-        "api_calls",
-    ).await.unwrap();
+    // Register a quota
+    let quota = Quota::new(fixture.org_id.clone(), "api_calls", 100, QuotaPeriod::Daily);
+    enforcer.register_quota(&quota);
 
-    assert_eq!(status.metric_code, "api_calls");
-    assert!(status.limit > 0);
+    // Check should succeed within limit
+    let result = enforcer.check(
+        &fixture.org_id,
+        &fixture.agent_id,
+        "api_calls",
+        50,
+    );
+
+    assert!(result.is_ok());
+    let check = result.unwrap();
+    assert!(check.allowed);
+    assert_eq!(check.limit, 100);
 }

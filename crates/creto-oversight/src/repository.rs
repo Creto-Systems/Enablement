@@ -547,6 +547,143 @@ impl StateTransitionRepository for PgStateTransitionRepository {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Checkpoint Repository
+// ─────────────────────────────────────────────────────────────────────────────
+
+use crate::checkpoint::Checkpoint;
+
+/// PostgreSQL implementation of CheckpointRepository.
+pub struct PgCheckpointRepository {
+    pool: PgPool,
+}
+
+impl PgCheckpointRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait::async_trait]
+impl crate::checkpoint::CheckpointRepository for PgCheckpointRepository {
+    async fn create(&self, checkpoint: &Checkpoint) -> Result<Uuid, CretoError> {
+        // Serialize checkpoint data as JSONB for flexibility
+        let checkpoint_data = serde_json::to_value(checkpoint)
+            .map_err(|e| CretoError::SerializationError(e.to_string()))?;
+
+        let row = sqlx::query(
+            r#"
+            INSERT INTO checkpoints (
+                id, request_id, status, checkpoint_data, version, reason, timestamp
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id
+            "#,
+        )
+        .bind(checkpoint.id)
+        .bind(checkpoint.request_id)
+        .bind(checkpoint.status.as_str())
+        .bind(&checkpoint_data)
+        .bind(checkpoint.version as i32)
+        .bind(&checkpoint.reason)
+        .bind(checkpoint.timestamp)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| CretoError::Database(e.to_string()))?;
+
+        Ok(row.get("id"))
+    }
+
+    async fn get(&self, id: Uuid) -> Result<Option<Checkpoint>, CretoError> {
+        let row = sqlx::query(
+            r#"
+            SELECT checkpoint_data
+            FROM checkpoints
+            WHERE id = $1
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| CretoError::Database(e.to_string()))?;
+
+        match row {
+            Some(r) => {
+                let checkpoint_data: serde_json::Value = r.get("checkpoint_data");
+                let checkpoint: Checkpoint = serde_json::from_value(checkpoint_data)
+                    .map_err(|e| CretoError::SerializationError(e.to_string()))?;
+                Ok(Some(checkpoint))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn get_latest(&self, request_id: Uuid) -> Result<Option<Checkpoint>, CretoError> {
+        let row = sqlx::query(
+            r#"
+            SELECT checkpoint_data
+            FROM checkpoints
+            WHERE request_id = $1
+            ORDER BY timestamp DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(request_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| CretoError::Database(e.to_string()))?;
+
+        match row {
+            Some(r) => {
+                let checkpoint_data: serde_json::Value = r.get("checkpoint_data");
+                let checkpoint: Checkpoint = serde_json::from_value(checkpoint_data)
+                    .map_err(|e| CretoError::SerializationError(e.to_string()))?;
+                Ok(Some(checkpoint))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn list_by_request(&self, request_id: Uuid) -> Result<Vec<Checkpoint>, CretoError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT checkpoint_data
+            FROM checkpoints
+            WHERE request_id = $1
+            ORDER BY timestamp DESC
+            "#,
+        )
+        .bind(request_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CretoError::Database(e.to_string()))?;
+
+        let mut checkpoints = Vec::with_capacity(rows.len());
+        for r in rows {
+            let checkpoint_data: serde_json::Value = r.get("checkpoint_data");
+            let checkpoint: Checkpoint = serde_json::from_value(checkpoint_data)
+                .map_err(|e| CretoError::SerializationError(e.to_string()))?;
+            checkpoints.push(checkpoint);
+        }
+
+        Ok(checkpoints)
+    }
+
+    async fn delete_before(&self, before: DateTime<Utc>) -> Result<usize, CretoError> {
+        let result = sqlx::query(
+            r#"
+            DELETE FROM checkpoints
+            WHERE timestamp < $1
+            "#,
+        )
+        .bind(before)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| CretoError::Database(e.to_string()))?;
+
+        Ok(result.rows_affected() as usize)
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Quorum Config Repository
 // ─────────────────────────────────────────────────────────────────────────────
 
