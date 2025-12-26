@@ -228,11 +228,18 @@ impl QuotaEnforcer {
         amount: i64,
     ) -> Result<QuotaCheckResult, EnforcerError> {
         let start = Instant::now();
-        let key = self.make_key_from_ids(organization_id, agent_id, metric_code);
+
+        // Generate both possible keys: agent-specific and org-level
+        let agent_key = self.make_key_from_ids(organization_id, agent_id, metric_code);
+        let org_key = self.make_key(organization_id, None, metric_code);
 
         // Step 1: Check bloom filter (fast path)
-        if !self.bloom_filter.might_contain(&key) {
-            // Definitely no quota registered, allow by default
+        // Check both agent-specific AND org-level keys
+        let agent_might_exist = self.bloom_filter.might_contain(&agent_key);
+        let org_might_exist = self.bloom_filter.might_contain(&org_key);
+
+        if !agent_might_exist && !org_might_exist {
+            // Definitely no quota registered (neither agent-specific nor org-level), allow by default
             return Ok(QuotaCheckResult::fast_allow(
                 CheckSource::BloomFilter,
                 start.elapsed().as_nanos() as u64,
@@ -240,40 +247,79 @@ impl QuotaEnforcer {
         }
 
         // Step 2: Check local cache
-        if let Some(cached) = self.get_cached(&key) {
-            if !cached.is_stale(self.config.cache_ttl_ms) {
-                let reserved = self.reservations.get_total_reserved(
-                    *organization_id.as_uuid(),
-                    metric_code,
-                );
-                let effective_usage = cached.usage + reserved;
+        // Try agent-specific key first
+        if agent_might_exist {
+            if let Some(cached) = self.get_cached(&agent_key) {
+                if !cached.is_stale(self.config.cache_ttl_ms) {
+                    let reserved = self.reservations.get_total_reserved(
+                        *organization_id.as_uuid(),
+                        metric_code,
+                    );
+                    let effective_usage = cached.usage + reserved;
 
-                let result = if effective_usage + amount <= cached.limit {
-                    QuotaCheckResult::allow(
-                        effective_usage,
-                        cached.limit,
-                        cached.period,
-                        cached.resets_at,
-                        CheckSource::LocalCache,
-                        start.elapsed().as_nanos() as u64,
-                    )
-                } else {
-                    QuotaCheckResult::deny(
-                        effective_usage,
-                        cached.limit,
-                        cached.period,
-                        cached.resets_at,
-                        CheckSource::LocalCache,
-                        start.elapsed().as_nanos() as u64,
-                    )
-                };
+                    let result = if effective_usage + amount <= cached.limit {
+                        QuotaCheckResult::allow(
+                            effective_usage,
+                            cached.limit,
+                            cached.period,
+                            cached.resets_at,
+                            CheckSource::LocalCache,
+                            start.elapsed().as_nanos() as u64,
+                        )
+                    } else {
+                        QuotaCheckResult::deny(
+                            effective_usage,
+                            cached.limit,
+                            cached.period,
+                            cached.resets_at,
+                            CheckSource::LocalCache,
+                            start.elapsed().as_nanos() as u64,
+                        )
+                    };
 
-                return Ok(result);
+                    return Ok(result);
+                }
+            }
+        }
+
+        // Check org-level cache
+        if org_might_exist {
+            if let Some(cached) = self.get_cached(&org_key) {
+                if !cached.is_stale(self.config.cache_ttl_ms) {
+                    let reserved = self.reservations.get_total_reserved(
+                        *organization_id.as_uuid(),
+                        metric_code,
+                    );
+                    let effective_usage = cached.usage + reserved;
+
+                    let result = if effective_usage + amount <= cached.limit {
+                        QuotaCheckResult::allow(
+                            effective_usage,
+                            cached.limit,
+                            cached.period,
+                            cached.resets_at,
+                            CheckSource::LocalCache,
+                            start.elapsed().as_nanos() as u64,
+                        )
+                    } else {
+                        QuotaCheckResult::deny(
+                            effective_usage,
+                            cached.limit,
+                            cached.period,
+                            cached.resets_at,
+                            CheckSource::LocalCache,
+                            start.elapsed().as_nanos() as u64,
+                        )
+                    };
+
+                    return Ok(result);
+                }
             }
         }
 
         // Step 3: Look up from storage (Redis in production)
-        let result = self.lookup_quota(&key, organization_id, agent_id, metric_code, amount, start)?;
+        // Try agent-specific first, fallback to org-level
+        let result = self.lookup_quota_with_fallback(&agent_key, &org_key, organization_id, agent_id, metric_code, amount, start)?;
 
         Ok(result)
     }
@@ -286,17 +332,22 @@ impl QuotaEnforcer {
         metric_code: &str,
         amount: i64,
     ) -> Result<(), EnforcerError> {
-        let key = self.make_key_from_ids(organization_id, agent_id, metric_code);
+        // Try both agent-specific and org-level keys
+        let agent_key = self.make_key_from_ids(organization_id, agent_id, metric_code);
+        let org_key = self.make_key(organization_id, None, metric_code);
 
-        // Update quota
+        // Update quota - try agent-specific first, then org-level
         if let Ok(mut quotas) = self.quotas.write() {
-            if let Some(quota) = quotas.get_mut(&key) {
+            if let Some(quota) = quotas.get_mut(&agent_key) {
+                quota.current_usage += amount;
+            } else if let Some(quota) = quotas.get_mut(&org_key) {
                 quota.current_usage += amount;
             }
         }
 
-        // Invalidate cache
-        self.invalidate_cache(&key);
+        // Invalidate both caches to be safe
+        self.invalidate_cache(&agent_key);
+        self.invalidate_cache(&org_key);
 
         Ok(())
     }
@@ -460,6 +511,44 @@ impl QuotaEnforcer {
             ))
         } else {
             Err(EnforcerError::CacheError(format!("Quota not found: {}", key)))
+        }
+    }
+
+    fn lookup_quota_with_fallback(
+        &self,
+        agent_key: &str,
+        org_key: &str,
+        organization_id: &OrganizationId,
+        agent_id: &AgentId,
+        metric_code: &str,
+        amount: i64,
+        start: Instant,
+    ) -> Result<QuotaCheckResult, EnforcerError> {
+        // Try agent-specific key first
+        let quotas = self.quotas.read()
+            .map_err(|e| EnforcerError::CacheError(e.to_string()))?;
+
+        // First try agent-specific quota
+        if quotas.get(agent_key).is_some() {
+            drop(quotas);
+            return self.lookup_quota(agent_key, organization_id, agent_id, metric_code, amount, start);
+        }
+
+        // Fall back to org-level quota
+        if quotas.get(org_key).is_some() {
+            drop(quotas);
+            return self.lookup_quota(org_key, organization_id, agent_id, metric_code, amount, start);
+        }
+
+        // No quota found at all
+        drop(quotas);
+        if self.config.fail_open {
+            Ok(QuotaCheckResult::fast_allow(
+                CheckSource::Default,
+                start.elapsed().as_nanos() as u64,
+            ))
+        } else {
+            Err(EnforcerError::CacheError(format!("Quota not found: {} or {}", agent_key, org_key)))
         }
     }
 
