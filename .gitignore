@@ -25,3 +25,6 @@ coverage/
 # Logs
 *.log
 logs/
+
+# Local symlinks to sibling Creto repos (developer-specific paths)
+deps/
