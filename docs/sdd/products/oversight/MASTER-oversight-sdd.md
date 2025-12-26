@@ -51,6 +51,23 @@ version: 1.0.0
 | **Audit** | Application logs | Merkle-anchored immutable audit |
 | **Workflow Pause** | Basic checkpoint | LangGraph-style `interrupt()` semantics |
 
+### 1.2.1 CRITICAL: Pattern Sources vs. Runtime Dependencies
+
+> **⚠️ NO CODE FROM HUMANLAYER OR LANGGRAPH IS IMPORTED INTO creto-oversight**
+>
+> The table above shows **design pattern analysis**. We studied HumanLayer's approval
+> workflow patterns and LangGraph's `interrupt()` semantics for requirements gathering.
+> creto-oversight is a **complete Rust rebuild** using only Creto Sovereign primitives.
+>
+> **Actual Dependencies (Cargo.toml):**
+> - `creto-nhi` (agent identity, delegation chains)
+> - `creto-crypto` (ML-DSA-65 signatures)
+> - `creto-authz` (168ns policy evaluation)
+> - `creto-memory` (agent reasoning context)
+> - `creto-audit` (Merkle-anchored logs)
+>
+> **NOT Dependencies:** humanlayer, langgraph, langchain
+
 ### 1.3 Key Metrics
 
 | Metric | Target | SLA |

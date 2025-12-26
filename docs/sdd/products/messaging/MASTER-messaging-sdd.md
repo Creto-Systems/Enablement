@@ -55,6 +55,23 @@ Creto Messaging provides **end-to-end encrypted communication** for AI agents wi
 | **libsignal** | Rust implementation patterns | Hybrid Ed25519 + ML-DSA-65 |
 | **Matrix/MLS** | Group messaging patterns | Sender Keys with NHI |
 
+### 1.2.1 CRITICAL: Pattern Sources vs. Runtime Dependencies
+
+> **⚠️ NO CODE FROM LIBSIGNAL IS IMPORTED INTO creto-messaging**
+>
+> The table above shows **protocol specifications** studied during design.
+> creto-messaging implements X3DH and Double Ratchet **from IETF/Signal specs**,
+> not by importing libsignal. It is a **complete Rust implementation** using Creto primitives.
+>
+> **Actual Dependencies (Cargo.toml):**
+> - `creto-nhi` (agent identity, replaces phone numbers)
+> - `creto-crypto` (ML-KEM-768, ML-DSA-65, X25519, AES-256-GCM)
+> - `creto-authz` (168ns delivery policy)
+> - `creto-storage` (encrypted message persistence)
+> - `creto-audit` (Merkle-anchored logs)
+>
+> **NOT Dependencies:** libsignal, signal-protocol, matrix-sdk
+
 ### 1.3 Key Capabilities
 
 | Capability | Specification | Notes |

@@ -42,7 +42,104 @@ This document follows the same design pattern established for Creto's Security L
 | Memory by Creto (RuVector) | pgvector | Row-level vector security, embedding provenance |
 | Storage by Creto | S3/MinIO | Crypto-agile encryption, semantic classification |
 
-### 1.2 Enablement Layer Products
+---
+
+### 1.2 CRITICAL: Pattern Sources vs. Runtime Dependencies
+
+> **THIS SECTION MUST BE READ BEFORE IMPLEMENTATION**
+
+#### What OSS References Mean
+
+When this document references open-source projects (Lago, HumanLayer, Agent Sandbox, Signal Protocol), these are **DESIGN PATTERN SOURCES ONLY**. They are NOT runtime dependencies, NOT integration points, and NOT libraries to import.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    OSS REFERENCES = DESIGN INSPIRATION ONLY                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   ╔═══════════════════════════════════════════════════════════════════╗    │
+│   ║  Lago, HumanLayer, Agent Sandbox, Signal Protocol, gVisor,        ║    │
+│   ║  OpenMeter, LangGraph, NATS, Kata Containers                      ║    │
+│   ╚═══════════════════════════════════════════════════════════════════╝    │
+│                              │                                              │
+│                              ▼                                              │
+│                    ┌─────────────────────┐                                  │
+│                    │  EXTRACT PATTERNS   │                                  │
+│                    │  • Data models      │                                  │
+│                    │  • API shapes       │                                  │
+│                    │  • Workflow logic   │                                  │
+│                    │  • Best practices   │                                  │
+│                    └──────────┬──────────┘                                  │
+│                               │                                              │
+│                               ▼                                              │
+│   ╔═══════════════════════════════════════════════════════════════════╗    │
+│   ║              COMPLETE RUST REBUILD FROM SCRATCH                   ║    │
+│   ║                                                                   ║    │
+│   ║  • Zero OSS library dependencies                                  ║    │
+│   ║  • 100% Creto-owned code                                          ║    │
+│   ║  • Sovereign primitives integrated from foundation               ║    │
+│   ║  • NHI, Crypto-Agility, Consensus, Audit built-in                ║    │
+│   ╚═══════════════════════════════════════════════════════════════════╝    │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### What We DO NOT Do
+
+| DO NOT | Reason |
+|--------|--------|
+| `cargo add lago` | Lago is Ruby; we extract patterns and rebuild in Rust |
+| `pip install humanlayer` | HumanLayer is Python; we rebuild in Rust with NHI |
+| `npm install @anthropic/agent-sandbox` | We build our own sandbox manager with Sovereign attestation |
+| Import `libsignal-protocol` | We implement X3DH/Double Ratchet with Creto crypto primitives |
+| Depend on `gvisor` Go library | gVisor is a runtime backend configured, not a code dependency |
+
+#### What We DO
+
+| Action | Result |
+|--------|--------|
+| Study Lago's `events` table schema | Design `creto-metering::BillableEvent` with NHI attribution |
+| Analyze HumanLayer's `@require_approval` | Build policy-driven `Decision::RequiresOversight` via AuthZ |
+| Review Agent Sandbox warm pool design | Implement `WarmPoolManager` with NHI-bound sandboxes |
+| Read Signal Protocol specification | Implement X3DH + Double Ratchet using `creto-crypto` primitives |
+
+#### Actual Runtime Dependencies (Creto Sibling Repos ONLY)
+
+The Enablement Layer has **exactly 8 runtime dependencies**, all Creto-owned:
+
+```rust
+// Cargo.toml for any Enablement crate
+[dependencies]
+# Platform Layer (Creto-owned)
+creto-nhi = { path = "../../platform/creto-nhi" }         # Agent identity
+creto-crypto = { path = "../../platform/creto-crypto" }   # ML-KEM, ML-DSA, BLAKE3
+creto-consensus = { path = "../../platform/creto-consensus" } # Raft ordering
+creto-audit = { path = "../../platform/creto-audit" }     # Merkle-anchored logs
+
+# Security Layer (Creto-owned)
+creto-authz = { path = "../../security/creto-authz" }     # 168ns policy
+creto-memory = { path = "../../security/creto-memory" }   # RuVector search
+creto-storage = { path = "../../security/creto-storage" } # Encrypted objects
+creto-vault = { path = "../../security/creto-vault" }     # HSM secrets
+
+# NO EXTERNAL OSS RUNTIME DEPENDENCIES
+# Lago: NOT a dependency (pattern source only)
+# HumanLayer: NOT a dependency (pattern source only)
+# Signal: NOT a dependency (protocol specification only)
+# Agent Sandbox: NOT a dependency (architecture reference only)
+```
+
+#### Why This Matters
+
+1. **Licensing**: No OSS license contamination; all code is Creto-owned
+2. **Security**: No supply chain vulnerabilities from external packages
+3. **Control**: Full control over implementation, performance, and evolution
+4. **Integration**: Deep integration with Sovereign primitives impossible with external libs
+5. **Compliance**: Auditable, single-vendor codebase for enterprise customers
+
+---
+
+### 1.3 Enablement Layer Products
 
 | Product | OSS Reference | Creto Differentiation |
 |---------|---------------|----------------------|

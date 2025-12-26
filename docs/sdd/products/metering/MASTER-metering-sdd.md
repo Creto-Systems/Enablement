@@ -54,6 +54,23 @@ Creto Metering provides **usage-based billing** and **quota enforcement** for AI
 | **Flexprice** | AI billing patterns | Token metering, GPU accounting |
 | **Stripe Billing** | Invoice workflows, webhook patterns | Cryptographic non-repudiation |
 
+### 1.2.1 CRITICAL: Pattern Sources vs. Runtime Dependencies
+
+> **⚠️ NO CODE FROM THESE OSS PROJECTS IS USED IN creto-metering**
+>
+> The table above shows **design pattern sources** studied during architecture.
+> creto-metering is a **complete Rust rebuild** using only Creto Sovereign primitives.
+>
+> **Actual Dependencies (Cargo.toml):**
+> - `creto-nhi` (agent identity)
+> - `creto-crypto` (ML-DSA signatures)
+> - `creto-authz` (168ns quota enforcement)
+> - `creto-storage` (event persistence)
+> - `creto-audit` (Merkle-anchored logs)
+> - `creto-consensus` (ordering timestamps)
+>
+> **NOT Dependencies:** Lago, OpenMeter, Flexprice, Stripe SDK
+
 ### 1.3 Key Capabilities
 
 | Capability | Specification | Notes |

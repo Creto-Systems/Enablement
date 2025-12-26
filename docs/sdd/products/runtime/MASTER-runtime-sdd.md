@@ -26,6 +26,22 @@ Enable **verifiable, isolated agent execution** where:
 - Unified inference layer abstracts cloud/local AI model access
 - Checkpoint/restore enables zero-downtime migration
 
+### CRITICAL: Pattern Sources vs. Runtime Dependencies
+
+> **⚠️ NO CODE FROM KUBERNETES-SIGS/AGENT-SANDBOX IS USED IN creto-runtime**
+>
+> We studied agent-sandbox's CRD patterns (Sandbox, SandboxTemplate, WarmPool) and
+> Python SDK design. creto-runtime is a **complete Rust rebuild** with Sovereign primitives.
+>
+> **Actual Dependencies (Cargo.toml):**
+> - `creto-nhi` (agent identity binding)
+> - `creto-crypto` (attestation signatures)
+> - `creto-authz` (168ns egress enforcement)
+> - `creto-vault` (secret injection)
+> - `creto-audit` (Merkle-anchored logs)
+>
+> **NOT Dependencies:** agent-sandbox, containerd, runc SDKs
+
 ### Key Differentiators
 
 | Feature | Standard Container Runtime | creto-runtime |

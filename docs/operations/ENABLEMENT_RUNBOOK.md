@@ -1571,6 +1571,305 @@ kubectl exec -it kafka-0 -n creto-enablement-prod -- \
 | **Large messages** | Increase batch size, adjust `max.poll.records` |
 | **Kafka broker overloaded** | Add more brokers, increase replication factor |
 
+### 6.6 AuthZ Outage
+
+**Symptoms**:
+- Alert: `AuthzUnavailable` (Prometheus)
+- All Enablement services returning 503 errors
+- Logs showing `AuthzError::ServiceUnavailable`
+
+**Immediate Actions**:
+```bash
+# 1. Verify AuthZ is actually down
+kubectl -n creto-authz get pods
+kubectl -n creto-authz logs -l app=creto-authz --tail=100
+
+# 2. Check if it's a network partition
+kubectl -n creto-enablement exec -it deploy/creto-metering -- \
+  nc -zv creto-authz.creto-authz.svc.cluster.local 8080
+
+# 3. If AuthZ pod is healthy but unreachable, check NetworkPolicy
+kubectl -n creto-authz get networkpolicy
+
+# 4. Check AuthZ dependencies (consensus, vault)
+kubectl -n creto-consensus logs -l app=creto-consensus --tail=50
+kubectl -n creto-vault logs -l app=creto-vault --tail=50
+```
+
+**Mitigation Steps**:
+
+**Option A: Restart AuthZ pods (if crashed)**
+```bash
+kubectl -n creto-authz rollout restart deploy/creto-authz
+kubectl -n creto-authz rollout status deploy/creto-authz --timeout=120s
+```
+
+**Option B: Scale up (if overloaded)**
+```bash
+kubectl -n creto-authz scale deploy/creto-authz --replicas=5
+```
+
+**Option C: Enable circuit breaker fallback (EMERGENCY ONLY)**
+```bash
+# This allows DENY-by-default fallback for 15 minutes
+# REQUIRES SECURITY TEAM APPROVAL
+kubectl -n creto-enablement set env deploy/creto-metering \
+  AUTHZ_CIRCUIT_BREAKER_ENABLED=true \
+  AUTHZ_FALLBACK_DECISION=DENY \
+  AUTHZ_FALLBACK_TTL_SECONDS=900
+
+# Apply to all Enablement services
+for svc in oversight runtime messaging; do
+  kubectl -n creto-enablement set env deploy/creto-$svc \
+    AUTHZ_CIRCUIT_BREAKER_ENABLED=true \
+    AUTHZ_FALLBACK_DECISION=DENY \
+    AUTHZ_FALLBACK_TTL_SECONDS=900
+done
+```
+
+**Verification**:
+```bash
+# Verify AuthZ is responding
+curl -s http://creto-authz:8080/health | jq .
+
+# Verify Enablement services recovered
+for port in 9090 9091 9092 9093; do
+  curl -s "http://localhost:$port/health" | jq .status
+done
+
+# Check error rate dropping
+promtool query instant 'rate(authz_check_errors_total[5m])'
+```
+
+**Post-Incident**:
+- Disable circuit breaker fallback if enabled
+- Review AuthZ capacity planning
+- Check if policy complexity increased (slow policy evaluation)
+
+### 6.7 Storage Cleanup
+
+**Symptoms**:
+- Alert: `StorageQuotaExceeded`
+- Errors: `StorageError::QuotaExceeded`
+- Disk usage >85%
+
+**Investigation**:
+```bash
+# Check storage usage
+kubectl -n creto-storage exec -it deploy/creto-storage -- df -h
+
+# Check largest tenants
+kubectl -n creto-storage exec -it deploy/creto-storage -- \
+  psql -c "SELECT organization_id, pg_size_pretty(sum(size))
+           FROM storage_objects
+           GROUP BY organization_id
+           ORDER BY sum(size) DESC
+           LIMIT 10;"
+
+# Check object age distribution
+kubectl -n creto-storage exec -it deploy/creto-storage -- \
+  psql -c "SELECT date_trunc('month', created_at), count(*), pg_size_pretty(sum(size))
+           FROM storage_objects
+           GROUP BY 1 ORDER BY 1;"
+```
+
+**Cleanup Procedures**:
+
+**Automated: Trigger retention policy**
+```bash
+# Run retention cleanup job
+kubectl -n creto-storage create job --from=cronjob/storage-retention cleanup-$(date +%s)
+kubectl -n creto-storage logs -f job/cleanup-$(date +%s)
+```
+
+**Manual: Delete old checkpoints (Runtime)**
+```bash
+# Delete checkpoints older than 30 days
+kubectl -n creto-storage exec -it deploy/creto-storage -- \
+  psql -c "DELETE FROM storage_objects
+           WHERE object_type = 'checkpoint'
+           AND created_at < now() - interval '30 days';"
+```
+
+**Manual: Archive cold data to S3**
+```bash
+# Archive messages older than 90 days
+kubectl -n creto-storage exec -it deploy/creto-storage -- \
+  /scripts/archive-to-s3.sh --older-than 90d --type message_envelope
+```
+
+**Emergency: Expand storage**
+```bash
+# Expand PVC (if storage class supports)
+kubectl -n creto-storage patch pvc storage-data -p \
+  '{"spec":{"resources":{"requests":{"storage":"500Gi"}}}}'
+```
+
+### 6.8 HSM Recovery
+
+**Symptoms**:
+- Alert: `VaultHSMUnavailable`
+- Errors: `VaultError::HSMConnectionFailed`
+- Signing operations failing
+
+**Investigation**:
+```bash
+# Check HSM connectivity
+kubectl -n creto-vault exec -it deploy/creto-vault -- \
+  /scripts/hsm-health-check.sh
+
+# Check HSM partition status (Luna HSM)
+kubectl -n creto-vault exec -it deploy/creto-vault -- \
+  lunacm -c slot list
+
+# Check recent HSM operations
+kubectl -n creto-vault logs -l app=creto-vault --tail=200 | grep -i hsm
+```
+
+**Recovery Steps**:
+
+**Step 1: Verify HSM hardware status**
+```bash
+# Contact data center / cloud provider
+# AWS CloudHSM: Check AWS Health Dashboard
+# Thales Luna: Contact Thales support
+```
+
+**Step 2: Failover to backup HSM (if available)**
+```bash
+kubectl -n creto-vault set env deploy/creto-vault \
+  HSM_PRIMARY_SLOT=backup-hsm-slot-id \
+  HSM_FAILOVER_ENABLED=true
+kubectl -n creto-vault rollout restart deploy/creto-vault
+```
+
+**Step 3: If HSM unrecoverable, enable software fallback (EMERGENCY)**
+```bash
+# WARNING: This reduces security posture
+# REQUIRES CISO APPROVAL
+
+kubectl -n creto-vault set env deploy/creto-vault \
+  HSM_SOFTWARE_FALLBACK_ENABLED=true \
+  HSM_SOFTWARE_FALLBACK_KEY_FILE=/secrets/fallback-key
+kubectl -n creto-vault rollout restart deploy/creto-vault
+```
+
+**Post-Recovery**:
+- Schedule HSM hardware replacement
+- Rotate all keys after hardware fix
+- Review HSM HA configuration
+
+### 6.9 Token Refresh Failures
+
+**Symptoms**:
+- Alert: `NHITokenRefreshFailed`
+- Agents unable to authenticate
+- Errors: `NHIError::TokenExpired`
+
+**Investigation**:
+```bash
+# Check NHI service health
+kubectl -n creto-nhi get pods
+kubectl -n creto-nhi logs -l app=creto-nhi --tail=100 | grep -i token
+
+# Check token store connectivity
+kubectl -n creto-nhi exec -it deploy/creto-nhi -- \
+  redis-cli -h creto-nhi-redis ping
+
+# Check certificate validity
+kubectl -n creto-nhi exec -it deploy/creto-nhi -- \
+  openssl x509 -in /certs/nhi-signing.crt -noout -dates
+```
+
+**Recovery Steps**:
+
+**If Redis unavailable**:
+```bash
+kubectl -n creto-nhi rollout restart statefulset/creto-nhi-redis
+kubectl -n creto-nhi rollout status statefulset/creto-nhi-redis --timeout=120s
+```
+
+**If signing certificate expired**:
+```bash
+# Rotate certificate (requires Vault)
+kubectl -n creto-nhi exec -it deploy/creto-nhi -- \
+  /scripts/rotate-signing-cert.sh
+
+# Restart NHI service
+kubectl -n creto-nhi rollout restart deploy/creto-nhi
+```
+
+**Force token refresh for all agents**:
+```bash
+# Broadcast token refresh event
+kubectl -n creto-nhi exec -it deploy/creto-nhi -- \
+  curl -X POST http://localhost:8080/admin/force-refresh-all
+```
+
+### 6.10 Cluster Healing (Consensus Split Brain)
+
+**Symptoms**:
+- Alert: `ConsensusSplitBrain`
+- Multiple leaders detected
+- Inconsistent state across nodes
+
+**Investigation**:
+```bash
+# Check Raft cluster status
+kubectl -n creto-consensus exec -it creto-consensus-0 -- \
+  /bin/raftadmin status
+
+# Check leader election
+kubectl -n creto-consensus logs -l app=creto-consensus --tail=200 | grep -i leader
+
+# Check network connectivity between nodes
+for i in 0 1 2; do
+  kubectl -n creto-consensus exec -it creto-consensus-$i -- \
+    nc -zv creto-consensus-$((($i + 1) % 3)).creto-consensus 8081
+done
+```
+
+**Healing Steps**:
+
+**Step 1: Identify the correct leader**
+```bash
+# Find node with most recent committed log
+for i in 0 1 2; do
+  echo "Node $i:"
+  kubectl -n creto-consensus exec -it creto-consensus-$i -- \
+    /bin/raftadmin log-info
+done
+```
+
+**Step 2: Stop minority partition nodes**
+```bash
+# Stop nodes not in majority partition
+kubectl -n creto-consensus delete pod creto-consensus-X --grace-period=0
+```
+
+**Step 3: Wait for leader stabilization**
+```bash
+# Monitor until single leader elected
+watch 'kubectl -n creto-consensus exec -it creto-consensus-0 -- /bin/raftadmin status'
+```
+
+**Step 4: Rejoin recovered nodes**
+```bash
+# Nodes will auto-rejoin after pod recreation
+kubectl -n creto-consensus get pods -w
+```
+
+**Data Reconciliation**:
+After split brain, verify data consistency:
+```bash
+# Compare state checksums across nodes
+for i in 0 1 2; do
+  echo "Node $i checksum:"
+  kubectl -n creto-consensus exec -it creto-consensus-$i -- \
+    /bin/raftadmin state-checksum
+done
+```
+
 ---
 
 ## 7. Disaster Recovery

@@ -135,7 +135,172 @@ INSERT INTO events (
 
 ---
 
-### 2. Subscriptions Table
+### 2. Organizations Table (Multi-Tenant Hierarchy)
+
+**Purpose**: Enable Platform → Organization → Team → Agent hierarchical billing with quota inheritance.
+
+> **P0 Gap Resolution**: This table addresses the multi-tenant hierarchy gap identified in the OSS Alignment Report.
+
+```sql
+CREATE TABLE organizations (
+    organization_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    -- Hierarchy (self-referential for Platform → Org → Team structure)
+    parent_org_id UUID REFERENCES organizations(organization_id),
+
+    -- Organization details
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE, -- URL-safe identifier
+    org_type TEXT NOT NULL CHECK (org_type IN ('platform', 'enterprise', 'team', 'project')),
+
+    -- Contact
+    billing_email TEXT NOT NULL,
+    technical_contact TEXT,
+
+    -- Billing configuration
+    billing_currency TEXT NOT NULL DEFAULT 'USD',
+    payment_method_id TEXT, -- Stripe payment method
+    stripe_customer_id TEXT, -- Stripe customer ID
+
+    -- Quota configuration (can override parent or inherit)
+    quota_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    -- Example: {"llm_tokens": {"limit": 1000000, "period": "monthly"}, "inherit": ["storage_gb"]}
+
+    -- Quota inheritance mode
+    quota_inheritance TEXT NOT NULL DEFAULT 'inherit'
+        CHECK (quota_inheritance IN ('inherit', 'override', 'additive')),
+
+    -- Status
+    status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'suspended', 'cancelled', 'pending')),
+
+    -- Temporal
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    -- Audit
+    created_by TEXT NOT NULL, -- NHI or email of creator
+
+    -- Constraints
+    CONSTRAINT no_self_parent CHECK (parent_org_id != organization_id),
+    CONSTRAINT valid_quota_config CHECK (jsonb_typeof(quota_config) = 'object')
+);
+
+-- Indexes for hierarchy traversal
+CREATE INDEX idx_organizations_parent ON organizations(parent_org_id);
+CREATE INDEX idx_organizations_slug ON organizations(slug);
+CREATE INDEX idx_organizations_type ON organizations(org_type);
+CREATE INDEX idx_organizations_stripe ON organizations(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
+
+-- Recursive CTE for full hierarchy traversal
+-- Usage: SELECT * FROM org_hierarchy WHERE organization_id = 'uuid';
+CREATE VIEW org_hierarchy AS
+WITH RECURSIVE hierarchy AS (
+    -- Base case: start from leaf organizations
+    SELECT
+        organization_id,
+        parent_org_id,
+        name,
+        org_type,
+        quota_config,
+        quota_inheritance,
+        1 as depth,
+        ARRAY[organization_id] as path
+    FROM organizations
+
+    UNION ALL
+
+    -- Recursive case: join with parents
+    SELECT
+        o.organization_id,
+        o.parent_org_id,
+        o.name,
+        o.org_type,
+        o.quota_config,
+        o.quota_inheritance,
+        h.depth + 1,
+        h.path || o.organization_id
+    FROM organizations o
+    JOIN hierarchy h ON o.organization_id = h.parent_org_id
+)
+SELECT * FROM hierarchy;
+```
+
+**Example Hierarchy**:
+```sql
+-- Platform (root)
+INSERT INTO organizations (organization_id, name, slug, org_type, billing_email, created_by)
+VALUES ('11111111-0000-0000-0000-000000000000', 'Creto Platform', 'creto', 'platform', 'billing@creto.io', 'system');
+
+-- Enterprise customer
+INSERT INTO organizations (organization_id, parent_org_id, name, slug, org_type, billing_email, stripe_customer_id, created_by)
+VALUES (
+    '22222222-0000-0000-0000-000000000000',
+    '11111111-0000-0000-0000-000000000000',
+    'Acme Corp',
+    'acme',
+    'enterprise',
+    'billing@acme.com',
+    'cus_Acme123',
+    'admin@acme.com'
+);
+
+-- Team within enterprise
+INSERT INTO organizations (organization_id, parent_org_id, name, slug, org_type, billing_email, quota_config, created_by)
+VALUES (
+    '33333333-0000-0000-0000-000000000000',
+    '22222222-0000-0000-0000-000000000000',
+    'Acme ML Team',
+    'acme-ml',
+    'team',
+    'ml-team@acme.com',
+    '{"llm_tokens": {"limit": 500000, "period": "monthly"}}'::jsonb,
+    'ml-lead@acme.com'
+);
+```
+
+**Quota Inheritance Logic**:
+```rust
+/// Calculate effective quota for an organization
+pub async fn get_effective_quota(
+    org_id: OrganizationId,
+    metric: &str,
+) -> Result<QuotaLimit, QuotaError> {
+    // Traverse hierarchy from org to root
+    let hierarchy = get_org_hierarchy(org_id).await?;
+
+    let mut effective_limit: Option<QuotaLimit> = None;
+
+    for org in hierarchy.iter().rev() { // root to leaf
+        match org.quota_inheritance {
+            QuotaInheritance::Inherit => {
+                // Use parent quota if no override
+                if let Some(limit) = org.quota_config.get(metric) {
+                    effective_limit = Some(limit.clone());
+                }
+            }
+            QuotaInheritance::Override => {
+                // Always use this org's quota
+                if let Some(limit) = org.quota_config.get(metric) {
+                    effective_limit = Some(limit.clone());
+                }
+            }
+            QuotaInheritance::Additive => {
+                // Add to parent quota
+                if let (Some(parent), Some(child)) = (&effective_limit, org.quota_config.get(metric)) {
+                    effective_limit = Some(parent.add(child));
+                }
+            }
+        }
+    }
+
+    effective_limit.ok_or(QuotaError::NoQuotaDefined { metric: metric.to_string() })
+}
+```
+
+---
+
+### 3. Subscriptions Table
 
 **Purpose**: Map agents to billing entities and pricing configurations.
 
@@ -143,8 +308,8 @@ INSERT INTO events (
 CREATE TABLE subscriptions (
     subscription_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    -- Customer identification
-    organization_id UUID NOT NULL,
+    -- Customer identification (references organizations hierarchy)
+    organization_id UUID NOT NULL REFERENCES organizations(organization_id),
     customer_email TEXT NOT NULL,
 
     -- Subscription state
