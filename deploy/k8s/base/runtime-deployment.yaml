@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: creto-runtime
+  namespace: creto-enablement
+  labels:
+    app: creto-runtime
+    app.kubernetes.io/name: creto-runtime
+    app.kubernetes.io/component: runtime
+    app.kubernetes.io/part-of: creto-enablement
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: creto-runtime
+  template:
+    metadata:
+      labels:
+        app: creto-runtime
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: creto-runtime
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+      containers:
+        - name: runtime
+          image: ghcr.io/creto-systems/enablement/runtime:latest
+          imagePullPolicy: Always
+          ports:
+            - name: grpc
+              containerPort: 50053
+              protocol: TCP
+            - name: http
+              containerPort: 8082
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: creto-runtime-config
+            - secretRef:
+                name: creto-runtime-secrets
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 2000m
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: creto-runtime
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: creto-runtime
+  namespace: creto-enablement
+  labels:
+    app: creto-runtime
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 50053
+      targetPort: grpc
+    - name: http
+      port: 8082
+      targetPort: http
+  selector:
+    app: creto-runtime
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: creto-runtime
+  namespace: creto-enablement
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: creto-runtime-config
+  namespace: creto-enablement
+data:
+  LOG_LEVEL: "info"
+  GRPC_PORT: "50053"
+  HTTP_PORT: "8082"
+  METRICS_ENABLED: "true"
+  WARM_POOL_MIN: "2"
+  WARM_POOL_MAX: "10"

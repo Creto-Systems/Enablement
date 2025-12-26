@@ -1,0 +1,33 @@
+# Multi-stage build for creto-messaging
+# Target size: <30MB using distroless base
+
+# Build stage
+FROM rust:1.75-bookworm AS builder
+
+WORKDIR /app
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+
+# Build with release optimizations
+RUN cargo build --release -p creto-messaging
+
+# Runtime stage
+FROM gcr.io/distroless/cc-debian12
+
+# Copy the binary
+COPY --from=builder /app/target/release/creto-messaging /usr/local/bin/ 2>/dev/null || true
+COPY --from=builder /app/target/release/libcreto_messaging.* /usr/local/lib/ 2>/dev/null || true
+
+# Non-root user (65532 = nonroot in distroless)
+USER 65532:65532
+
+# Expose gRPC and HTTP ports
+EXPOSE 50054 8083
+
+# Health check endpoint
+ENV HEALTH_PORT=8083
+
+ENTRYPOINT ["/usr/local/bin/creto-messaging"]
+CMD ["serve"]

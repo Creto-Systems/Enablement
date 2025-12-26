@@ -1,0 +1,16 @@
+node_modules/
+npm-debug.log
+dist/
+build/
+.git/
+.gitignore
+.env
+.env.*
+README.md
+.vscode/
+.idea/
+coverage/
+test-results/
+playwright-report/
+*.log
+.DS_Store

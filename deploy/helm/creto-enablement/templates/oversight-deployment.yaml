@@ -1,0 +1,140 @@
+{{- if .Values.oversight.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "creto-enablement.fullname" . }}-oversight
+  labels:
+    {{- include "creto-enablement.labels" . | nindent 4 }}
+    app.kubernetes.io/component: oversight
+spec:
+  {{- if not .Values.oversight.autoscaling.enabled }}
+  replicas: {{ .Values.oversight.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "creto-enablement.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: oversight
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.oversight.service.httpPort }}"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "creto-enablement.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: oversight
+    spec:
+      serviceAccountName: {{ include "creto-enablement.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: oversight
+          image: {{ include "creto-enablement.image" (dict "global" .Values.global "image" .Values.oversight.image) }}
+          imagePullPolicy: {{ .Values.oversight.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.oversight.service.grpcPort }}
+              protocol: TCP
+            - name: http
+              containerPort: {{ .Values.oversight.service.httpPort }}
+              protocol: TCP
+          env:
+            - name: LOG_LEVEL
+              value: {{ .Values.oversight.config.logLevel | quote }}
+            - name: GRPC_PORT
+              value: {{ .Values.oversight.service.grpcPort | quote }}
+            - name: HTTP_PORT
+              value: {{ .Values.oversight.service.httpPort | quote }}
+            - name: METRICS_ENABLED
+              value: {{ .Values.oversight.config.metricsEnabled | quote }}
+            - name: ESCALATION_TIMEOUT
+              value: {{ .Values.oversight.config.escalationTimeout | quote }}
+            - name: SLACK_ENABLED
+              value: {{ .Values.oversight.config.slackEnabled | quote }}
+            - name: EMAIL_ENABLED
+              value: {{ .Values.oversight.config.emailEnabled | quote }}
+            {{- if .Values.oversight.config.slackEnabled }}
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "creto-enablement.fullname" . }}-oversight-secrets
+                  key: slack-webhook-url
+            {{- end }}
+            {{- if .Values.oversight.config.emailEnabled }}
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "creto-enablement.fullname" . }}-oversight-secrets
+                  key: smtp-host
+            - name: SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "creto-enablement.fullname" . }}-oversight-secrets
+                  key: smtp-username
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "creto-enablement.fullname" . }}-oversight-secrets
+                  key: smtp-password
+            {{- end }}
+          resources:
+            {{- toYaml .Values.oversight.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "creto-enablement.fullname" . }}-oversight
+  labels:
+    {{- include "creto-enablement.labels" . | nindent 4 }}
+    app.kubernetes.io/component: oversight
+spec:
+  type: {{ .Values.oversight.service.type }}
+  ports:
+    - name: grpc
+      port: {{ .Values.oversight.service.grpcPort }}
+      targetPort: grpc
+    - name: http
+      port: {{ .Values.oversight.service.httpPort }}
+      targetPort: http
+  selector:
+    {{- include "creto-enablement.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: oversight
+{{- if .Values.oversight.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "creto-enablement.fullname" . }}-oversight
+  labels:
+    {{- include "creto-enablement.labels" . | nindent 4 }}
+    app.kubernetes.io/component: oversight
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "creto-enablement.fullname" . }}-oversight
+  minReplicas: {{ .Values.oversight.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.oversight.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.oversight.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,36 @@
+# Multi-stage build for creto-metering
+# Target size: <30MB using distroless base
+
+# Build stage
+FROM rust:1.75-bookworm AS builder
+
+WORKDIR /app
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+
+# Build with release optimizations
+RUN cargo build --release -p creto-metering
+
+# Verify binary size
+RUN ls -la /app/target/release/creto-metering || echo "Binary not found (library crate)"
+
+# Runtime stage
+FROM gcr.io/distroless/cc-debian12
+
+# Copy the binary (adjust if needed for library crate with bin target)
+COPY --from=builder /app/target/release/creto-metering /usr/local/bin/ 2>/dev/null || true
+COPY --from=builder /app/target/release/libcreto_metering.* /usr/local/lib/ 2>/dev/null || true
+
+# Non-root user (65532 = nonroot in distroless)
+USER 65532:65532
+
+# Expose gRPC and HTTP ports
+EXPOSE 50051 8080
+
+# Health check endpoint
+ENV HEALTH_PORT=8080
+
+ENTRYPOINT ["/usr/local/bin/creto-metering"]
+CMD ["serve"]

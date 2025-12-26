@@ -1,0 +1,153 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "creto-enablement.fullname" . }}-alerts
+  labels:
+    {{- include "creto-enablement.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: creto-enablement.rules
+      rules:
+        # Availability alerts
+        - alert: CretoServiceDown
+          expr: up{job=~"creto-.*"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Creto service {{ $labels.job }} is down"
+            description: "{{ $labels.job }} has been down for more than 1 minute."
+
+        - alert: CretoHighErrorRate
+          expr: |
+            (
+              sum(rate(creto_metering_errors_total[5m])) +
+              sum(rate(creto_oversight_errors_total[5m])) +
+              sum(rate(creto_runtime_errors_total[5m])) +
+              sum(rate(creto_messaging_errors_total[5m]))
+            ) /
+            (
+              sum(rate(creto_metering_requests_total[5m])) +
+              sum(rate(creto_oversight_requests_total[5m])) +
+              sum(rate(creto_runtime_requests_total[5m])) +
+              sum(rate(creto_messaging_requests_total[5m]))
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High error rate in Creto Enablement"
+            description: "Error rate is above 5% for more than 5 minutes."
+
+        - alert: CretoHighErrorRateCritical
+          expr: |
+            (
+              sum(rate(creto_metering_errors_total[5m])) +
+              sum(rate(creto_oversight_errors_total[5m])) +
+              sum(rate(creto_runtime_errors_total[5m])) +
+              sum(rate(creto_messaging_errors_total[5m]))
+            ) /
+            (
+              sum(rate(creto_metering_requests_total[5m])) +
+              sum(rate(creto_oversight_requests_total[5m])) +
+              sum(rate(creto_runtime_requests_total[5m])) +
+              sum(rate(creto_messaging_requests_total[5m]))
+            ) > 0.10
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Critical error rate in Creto Enablement"
+            description: "Error rate is above 10% for more than 2 minutes."
+
+        # Latency alerts
+        - alert: CretoMeteringHighLatency
+          expr: histogram_quantile(0.99, sum(rate(creto_metering_request_duration_seconds_bucket[5m])) by (le)) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High latency in Metering service"
+            description: "Metering p99 latency is above 100ms."
+
+        - alert: CretoOversightHighLatency
+          expr: histogram_quantile(0.99, sum(rate(creto_oversight_request_duration_seconds_bucket[5m])) by (le)) > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High latency in Oversight service"
+            description: "Oversight p99 latency is above 1s."
+
+        - alert: CretoRuntimeHighLatency
+          expr: histogram_quantile(0.99, sum(rate(creto_runtime_request_duration_seconds_bucket[5m])) by (le)) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High latency in Runtime service"
+            description: "Runtime p99 latency is above 2s (sandbox creation)."
+
+        # Resource alerts
+        - alert: CretoHighMemoryUsage
+          expr: |
+            (container_memory_usage_bytes{container=~"metering|oversight|runtime|messaging"} /
+            container_spec_memory_limit_bytes{container=~"metering|oversight|runtime|messaging"}) > 0.9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High memory usage in {{ $labels.container }}"
+            description: "Memory usage is above 90%."
+
+        - alert: CretoHighCPUUsage
+          expr: |
+            (rate(container_cpu_usage_seconds_total{container=~"metering|oversight|runtime|messaging"}[5m]) /
+            container_spec_cpu_quota{container=~"metering|oversight|runtime|messaging"} * 100000) > 80
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU usage in {{ $labels.container }}"
+            description: "CPU usage is above 80%."
+
+        # Metering-specific alerts
+        - alert: CretoQuotaExceeded
+          expr: sum(creto_metering_quota_exceeded_total) by (organization_id) > 0
+          for: 1m
+          labels:
+            severity: info
+          annotations:
+            summary: "Quota exceeded for organization {{ $labels.organization_id }}"
+            description: "An organization has exceeded their quota limits."
+
+        # Runtime-specific alerts
+        - alert: CretoWarmPoolLow
+          expr: creto_runtime_warm_pool_size < 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Warm pool is running low"
+            description: "Warm pool has fewer than 2 sandboxes ready."
+
+        - alert: CretoWarmPoolEmpty
+          expr: creto_runtime_warm_pool_size == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Warm pool is empty"
+            description: "No warm sandboxes available - cold start latency will increase."
+
+        # Oversight-specific alerts
+        - alert: CretoOversightPendingTooLong
+          expr: creto_oversight_pending_requests > 10
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Too many pending oversight requests"
+            description: "More than 10 oversight requests pending for 15+ minutes."
+{{- end }}

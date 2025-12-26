@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: creto-enablement-dev
+
+resources:
+  - ../../base
+
+namePrefix: dev-
+
+commonLabels:
+  environment: dev
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+    target:
+      kind: Deployment
+
+images:
+  - name: ghcr.io/creto-systems/enablement/metering
+    newTag: dev
+  - name: ghcr.io/creto-systems/enablement/oversight
+    newTag: dev
+  - name: ghcr.io/creto-systems/enablement/runtime
+    newTag: dev
+  - name: ghcr.io/creto-systems/enablement/messaging
+    newTag: dev
+
+configMapGenerator:
+  - name: creto-metering-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=debug
+  - name: creto-oversight-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=debug
+  - name: creto-runtime-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=debug
+  - name: creto-messaging-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=debug

@@ -1,0 +1,186 @@
+# Default values for creto-enablement
+# This is a YAML-formatted file.
+
+global:
+  imageRegistry: ghcr.io/creto-systems/enablement
+  imagePullSecrets: []
+  storageClass: ""
+
+# Metering Service
+metering:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: metering
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    grpcPort: 50051
+    httpPort: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  config:
+    logLevel: info
+    metricsEnabled: true
+
+# Oversight Service (Human-in-the-Loop)
+oversight:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: oversight
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    grpcPort: 50052
+    httpPort: 8081
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  config:
+    logLevel: info
+    slackEnabled: true
+    emailEnabled: true
+
+# Runtime Service (Sandbox Execution)
+runtime:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: runtime
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    grpcPort: 50053
+    httpPort: 8082
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 2000m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 60
+  config:
+    logLevel: info
+    warmPoolMin: 2
+    warmPoolMax: 10
+
+# Messaging Service (E2E Encrypted)
+messaging:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: messaging
+    tag: latest
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    grpcPort: 50054
+    httpPort: 8083
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  config:
+    logLevel: info
+    encryptionAlgorithm: AES-256-GCM
+
+# Shared configuration
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Dependencies
+redis:
+  enabled: true
+  architecture: replication
+  auth:
+    enabled: true
+    existingSecret: creto-redis-secret
+  replica:
+    replicaCount: 3
+
+postgresql:
+  enabled: true
+  architecture: replication
+  auth:
+    existingSecret: creto-postgresql-secret
+  primary:
+    persistence:
+      size: 50Gi
+  readReplicas:
+    replicaCount: 2
+    persistence:
+      size: 50Gi
+
+# Monitoring
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+
+# Ingress
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: enablement.creto.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Network Policies
+networkPolicy:
+  enabled: true

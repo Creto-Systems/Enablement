@@ -1,0 +1,65 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: creto-enablement
+
+resources:
+  - ../../base
+  - pdb.yaml
+  - hpa.yaml
+
+commonLabels:
+  environment: production
+
+images:
+  - name: ghcr.io/creto-systems/enablement/metering
+    newName: gcr.io/creto-prod/enablement/metering
+    newTag: v1.0.0
+  - name: ghcr.io/creto-systems/enablement/oversight
+    newName: gcr.io/creto-prod/enablement/oversight
+    newTag: v1.0.0
+  - name: ghcr.io/creto-systems/enablement/runtime
+    newName: gcr.io/creto-prod/enablement/runtime
+    newTag: v1.0.0
+  - name: ghcr.io/creto-systems/enablement/messaging
+    newName: gcr.io/creto-prod/enablement/messaging
+    newTag: v1.0.0
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "500m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "512Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "1Gi"
+    target:
+      kind: Deployment
+
+configMapGenerator:
+  - name: creto-metering-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=warn
+      - METRICS_ENABLED=true
+  - name: creto-oversight-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=warn
+      - METRICS_ENABLED=true
+  - name: creto-runtime-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=warn
+      - METRICS_ENABLED=true
+  - name: creto-messaging-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=warn
+      - METRICS_ENABLED=true

@@ -1,0 +1,33 @@
+apiVersion: v2
+name: creto-enablement
+description: Creto Enablement Layer - Metering, Oversight, Runtime, Messaging
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - creto
+  - enablement
+  - metering
+  - oversight
+  - runtime
+  - messaging
+  - ai-agents
+
+home: https://github.com/Creto-Systems/Enablement
+sources:
+  - https://github.com/Creto-Systems/Enablement
+
+maintainers:
+  - name: Creto Team
+    email: platform@creto.io
+
+dependencies:
+  - name: redis
+    version: "18.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: postgresql
+    version: "13.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled

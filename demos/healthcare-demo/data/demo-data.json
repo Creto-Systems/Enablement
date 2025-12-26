@@ -1,0 +1,331 @@
+{
+  "patients": [
+    {
+      "id": "patient-001",
+      "mrn": "MRN001234",
+      "demographics": {
+        "firstName": "John",
+        "lastName": "Smith",
+        "dateOfBirth": "1970-05-15",
+        "gender": "male",
+        "contactInfo": {
+          "phone": "555-0123",
+          "email": "john.smith@example.com",
+          "address": {
+            "street": "123 Main Street",
+            "city": "Boston",
+            "state": "MA",
+            "zipCode": "02101",
+            "country": "USA"
+          }
+        }
+      },
+      "insurance": {
+        "provider": "Blue Cross Blue Shield",
+        "policyNumber": "BCBS123456",
+        "groupNumber": "G789012"
+      },
+      "medicalHistory": {
+        "conditions": [
+          {
+            "id": "cond-001",
+            "icd10Code": "I10",
+            "description": "Essential Hypertension",
+            "diagnosedDate": "2015-03-20",
+            "status": "chronic"
+          },
+          {
+            "id": "cond-002",
+            "icd10Code": "E11.9",
+            "description": "Type 2 Diabetes Mellitus",
+            "diagnosedDate": "2018-07-10",
+            "status": "chronic"
+          },
+          {
+            "id": "cond-003",
+            "icd10Code": "E78.5",
+            "description": "Hyperlipidemia",
+            "diagnosedDate": "2016-11-05",
+            "status": "chronic"
+          }
+        ],
+        "medications": [
+          {
+            "id": "med-001",
+            "name": "Lisinopril",
+            "genericName": "lisinopril",
+            "rxNormCode": "29046",
+            "dose": "10 mg",
+            "route": "PO",
+            "frequency": "Once daily",
+            "startDate": "2015-03-20",
+            "prescribedBy": "Dr. Elizabeth Johnson",
+            "controlledSubstance": false
+          },
+          {
+            "id": "med-002",
+            "name": "Metformin",
+            "genericName": "metformin",
+            "rxNormCode": "6809",
+            "dose": "500 mg",
+            "route": "PO",
+            "frequency": "Twice daily",
+            "startDate": "2018-07-10",
+            "prescribedBy": "Dr. Elizabeth Johnson",
+            "controlledSubstance": false
+          },
+          {
+            "id": "med-003",
+            "name": "Atorvastatin",
+            "genericName": "atorvastatin",
+            "rxNormCode": "83367",
+            "dose": "20 mg",
+            "route": "PO",
+            "frequency": "Once daily at bedtime",
+            "startDate": "2016-11-05",
+            "prescribedBy": "Dr. Elizabeth Johnson",
+            "controlledSubstance": false
+          }
+        ],
+        "allergies": [
+          {
+            "id": "allergy-001",
+            "allergen": "Penicillin",
+            "reaction": "Rash, itching",
+            "severity": "moderate",
+            "verifiedDate": "1975-01-01"
+          }
+        ]
+      }
+    },
+    {
+      "id": "patient-002",
+      "mrn": "MRN002345",
+      "demographics": {
+        "firstName": "Maria",
+        "lastName": "Garcia",
+        "dateOfBirth": "1985-09-22",
+        "gender": "female",
+        "contactInfo": {
+          "phone": "555-0456",
+          "email": "maria.garcia@example.com",
+          "address": {
+            "street": "456 Oak Avenue",
+            "city": "Cambridge",
+            "state": "MA",
+            "zipCode": "02138",
+            "country": "USA"
+          }
+        }
+      },
+      "insurance": {
+        "provider": "Aetna",
+        "policyNumber": "AETNA987654",
+        "groupNumber": "G456789"
+      },
+      "medicalHistory": {
+        "conditions": [
+          {
+            "id": "cond-004",
+            "icd10Code": "J45.909",
+            "description": "Asthma, unspecified",
+            "diagnosedDate": "2010-05-15",
+            "status": "active"
+          }
+        ],
+        "medications": [
+          {
+            "id": "med-004",
+            "name": "Albuterol",
+            "genericName": "albuterol",
+            "rxNormCode": "435",
+            "dose": "90 mcg",
+            "route": "Inhaled",
+            "frequency": "PRN for shortness of breath",
+            "startDate": "2010-05-15",
+            "prescribedBy": "Dr. Michael Chen",
+            "controlledSubstance": false
+          }
+        ],
+        "allergies": [
+          {
+            "id": "allergy-002",
+            "allergen": "Sulfa drugs",
+            "reaction": "Hives",
+            "severity": "moderate",
+            "verifiedDate": "2010-03-01"
+          }
+        ]
+      }
+    },
+    {
+      "id": "patient-003",
+      "mrn": "MRN003456",
+      "demographics": {
+        "firstName": "Robert",
+        "lastName": "Thompson",
+        "dateOfBirth": "1945-12-03",
+        "gender": "male",
+        "contactInfo": {
+          "phone": "555-0789",
+          "email": "robert.thompson@example.com",
+          "address": {
+            "street": "789 Elm Street",
+            "city": "Brookline",
+            "state": "MA",
+            "zipCode": "02445",
+            "country": "USA"
+          }
+        }
+      },
+      "insurance": {
+        "provider": "Medicare",
+        "policyNumber": "MCARE456789",
+        "groupNumber": "M123456"
+      },
+      "medicalHistory": {
+        "conditions": [
+          {
+            "id": "cond-005",
+            "icd10Code": "I25.10",
+            "description": "Coronary Artery Disease",
+            "diagnosedDate": "2010-08-20",
+            "status": "chronic"
+          },
+          {
+            "id": "cond-006",
+            "icd10Code": "I48.91",
+            "description": "Atrial Fibrillation",
+            "diagnosedDate": "2015-02-14",
+            "status": "chronic"
+          },
+          {
+            "id": "cond-007",
+            "icd10Code": "N18.3",
+            "description": "Chronic Kidney Disease, Stage 3",
+            "diagnosedDate": "2018-06-10",
+            "status": "chronic"
+          }
+        ],
+        "medications": [
+          {
+            "id": "med-005",
+            "name": "Warfarin",
+            "genericName": "warfarin",
+            "rxNormCode": "11289",
+            "dose": "5 mg",
+            "route": "PO",
+            "frequency": "Once daily",
+            "startDate": "2015-02-14",
+            "prescribedBy": "Dr. Sarah Williams",
+            "controlledSubstance": false
+          },
+          {
+            "id": "med-006",
+            "name": "Metoprolol",
+            "genericName": "metoprolol",
+            "rxNormCode": "6918",
+            "dose": "50 mg",
+            "route": "PO",
+            "frequency": "Twice daily",
+            "startDate": "2010-08-20",
+            "prescribedBy": "Dr. Sarah Williams",
+            "controlledSubstance": false
+          }
+        ],
+        "allergies": []
+      }
+    }
+  ],
+  "demoScenarios": [
+    {
+      "id": "scenario-001",
+      "name": "Acute Coronary Syndrome - Controlled Substance Approval",
+      "description": "Emergency presentation with chest pain requiring morphine for pain control",
+      "patientId": "patient-001",
+      "chiefComplaint": "Severe chest pain radiating to left arm",
+      "symptoms": [
+        {
+          "description": "Crushing chest pain",
+          "onset": "2 hours ago",
+          "duration": "2 hours",
+          "severity": 9,
+          "location": "Substernal",
+          "quality": "Crushing",
+          "radiation": "Left arm"
+        },
+        {
+          "description": "Shortness of breath",
+          "onset": "2 hours ago",
+          "duration": "2 hours",
+          "severity": 7,
+          "location": "Chest"
+        },
+        {
+          "description": "Diaphoresis",
+          "onset": "2 hours ago",
+          "duration": "2 hours",
+          "severity": 6
+        }
+      ],
+      "expectedDiagnosis": "Acute Coronary Syndrome (I24.9)",
+      "expectedOversight": "Multi-level approval required for controlled substance (Morphine)"
+    },
+    {
+      "id": "scenario-002",
+      "name": "Asthma Exacerbation - Routine Treatment",
+      "description": "Asthma exacerbation requiring standard bronchodilator therapy",
+      "patientId": "patient-002",
+      "chiefComplaint": "Worsening shortness of breath and wheezing",
+      "symptoms": [
+        {
+          "description": "Wheezing",
+          "onset": "1 day ago",
+          "duration": "24 hours",
+          "severity": 6,
+          "location": "Bilateral lung fields"
+        },
+        {
+          "description": "Shortness of breath",
+          "onset": "1 day ago",
+          "duration": "24 hours",
+          "severity": 7,
+          "quality": "Worse with exertion"
+        },
+        {
+          "description": "Cough",
+          "onset": "3 days ago",
+          "duration": "3 days",
+          "severity": 5,
+          "quality": "Non-productive"
+        }
+      ],
+      "expectedDiagnosis": "Asthma Exacerbation (J45.909)",
+      "expectedOversight": "No approval required - standard treatment protocol"
+    },
+    {
+      "id": "scenario-003",
+      "name": "Geriatric Patient - Medication Requiring Special Oversight",
+      "description": "79-year-old with multiple comorbidities requiring anticoagulation adjustment",
+      "patientId": "patient-003",
+      "chiefComplaint": "Irregular heartbeat and palpitations",
+      "symptoms": [
+        {
+          "description": "Palpitations",
+          "onset": "1 week ago",
+          "duration": "1 week",
+          "severity": 5,
+          "quality": "Intermittent"
+        },
+        {
+          "description": "Fatigue",
+          "onset": "1 week ago",
+          "duration": "1 week",
+          "severity": 6
+        }
+      ],
+      "expectedDiagnosis": "Atrial Fibrillation (I48.91)",
+      "expectedOversight": "Geriatric oversight required for anticoagulation changes with CKD"
+    }
+  ]
+}

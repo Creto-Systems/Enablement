@@ -1,0 +1,241 @@
+name: Build and Publish
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+env:
+  CARGO_TERM_COLOR: always
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/enablement
+
+jobs:
+  # Run tests first
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --workspace --all-features
+
+  # Build Docker images
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - metering
+          - oversight
+          - runtime
+          - messaging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=,suffix=,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./deploy/docker/Dockerfile.${{ matrix.service }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            RUST_VERSION=1.75
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            VCS_REF=${{ github.sha }}
+
+  # Helm chart validation
+  helm-lint:
+    name: Lint Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.0
+
+      - name: Lint Helm chart
+        run: helm lint deploy/helm/creto-enablement
+
+      - name: Template Helm chart (dev)
+        run: |
+          helm template creto-enablement deploy/helm/creto-enablement \
+            --namespace creto-enablement-dev \
+            --set metering.image.tag=dev \
+            --set oversight.image.tag=dev \
+            --set runtime.image.tag=dev \
+            --set messaging.image.tag=dev
+
+      - name: Template Helm chart (prod)
+        run: |
+          helm template creto-enablement deploy/helm/creto-enablement \
+            --namespace creto-enablement \
+            --set global.imageRegistry=gcr.io/creto-prod/enablement \
+            --set metering.image.tag=v1.0.0 \
+            --set oversight.image.tag=v1.0.0 \
+            --set runtime.image.tag=v1.0.0 \
+            --set messaging.image.tag=v1.0.0
+
+  # Security scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        service:
+          - metering
+          - oversight
+          - runtime
+          - messaging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.service }}.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+
+  # Release job - triggers on tags
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [build, helm-lint, security-scan]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.0
+
+      - name: Package Helm chart
+        run: |
+          helm package deploy/helm/creto-enablement \
+            --version ${{ github.ref_name }} \
+            --app-version ${{ github.ref_name }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            creto-enablement-*.tgz
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
+
+  # Deploy to staging (on main branch)
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, helm-lint]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.13.0
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+
+      - name: Deploy to staging
+        run: |
+          helm upgrade --install creto-enablement deploy/helm/creto-enablement \
+            --namespace creto-enablement-staging \
+            --create-namespace \
+            --set global.imageRegistry=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }} \
+            --set metering.image.tag=${{ github.sha }} \
+            --set oversight.image.tag=${{ github.sha }} \
+            --set runtime.image.tag=${{ github.sha }} \
+            --set messaging.image.tag=${{ github.sha }} \
+            --set metering.replicaCount=2 \
+            --set oversight.replicaCount=2 \
+            --set runtime.replicaCount=2 \
+            --set messaging.replicaCount=2 \
+            --wait --timeout 10m
+
+      - name: Run smoke tests
+        run: |
+          kubectl -n creto-enablement-staging rollout status deployment/creto-enablement-metering --timeout=5m
+          kubectl -n creto-enablement-staging rollout status deployment/creto-enablement-oversight --timeout=5m
+          kubectl -n creto-enablement-staging rollout status deployment/creto-enablement-runtime --timeout=5m
+          kubectl -n creto-enablement-staging rollout status deployment/creto-enablement-messaging --timeout=5m

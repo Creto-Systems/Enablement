@@ -1,0 +1,110 @@
+{{- if .Values.metering.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "creto-enablement.fullname" . }}-metering
+  labels:
+    {{- include "creto-enablement.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metering
+spec:
+  {{- if not .Values.metering.autoscaling.enabled }}
+  replicas: {{ .Values.metering.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "creto-enablement.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: metering
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.metering.service.httpPort }}"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "creto-enablement.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: metering
+    spec:
+      serviceAccountName: {{ include "creto-enablement.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: metering
+          image: {{ include "creto-enablement.image" (dict "global" .Values.global "image" .Values.metering.image) }}
+          imagePullPolicy: {{ .Values.metering.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.metering.service.grpcPort }}
+              protocol: TCP
+            - name: http
+              containerPort: {{ .Values.metering.service.httpPort }}
+              protocol: TCP
+          env:
+            - name: LOG_LEVEL
+              value: {{ .Values.metering.config.logLevel | quote }}
+            - name: GRPC_PORT
+              value: {{ .Values.metering.service.grpcPort | quote }}
+            - name: HTTP_PORT
+              value: {{ .Values.metering.service.httpPort | quote }}
+            - name: METRICS_ENABLED
+              value: {{ .Values.metering.config.metricsEnabled | quote }}
+          resources:
+            {{- toYaml .Values.metering.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "creto-enablement.fullname" . }}-metering
+  labels:
+    {{- include "creto-enablement.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metering
+spec:
+  type: {{ .Values.metering.service.type }}
+  ports:
+    - name: grpc
+      port: {{ .Values.metering.service.grpcPort }}
+      targetPort: grpc
+    - name: http
+      port: {{ .Values.metering.service.httpPort }}
+      targetPort: http
+  selector:
+    {{- include "creto-enablement.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: metering
+{{- if .Values.metering.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "creto-enablement.fullname" . }}-metering
+  labels:
+    {{- include "creto-enablement.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metering
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "creto-enablement.fullname" . }}-metering
+  minReplicas: {{ .Values.metering.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.metering.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.metering.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

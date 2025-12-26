@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: creto-metering
+  namespace: creto-enablement
+  labels:
+    app: creto-metering
+    app.kubernetes.io/name: creto-metering
+    app.kubernetes.io/component: metering
+    app.kubernetes.io/part-of: creto-enablement
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: creto-metering
+  template:
+    metadata:
+      labels:
+        app: creto-metering
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: creto-metering
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+      containers:
+        - name: metering
+          image: ghcr.io/creto-systems/enablement/metering:latest
+          imagePullPolicy: Always
+          ports:
+            - name: grpc
+              containerPort: 50051
+              protocol: TCP
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: creto-metering-config
+            - secretRef:
+                name: creto-metering-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: creto-metering
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: creto-metering
+  namespace: creto-enablement
+  labels:
+    app: creto-metering
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: grpc
+    - name: http
+      port: 8080
+      targetPort: http
+  selector:
+    app: creto-metering
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: creto-metering
+  namespace: creto-enablement
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: creto-metering-config
+  namespace: creto-enablement
+data:
+  LOG_LEVEL: "info"
+  GRPC_PORT: "50051"
+  HTTP_PORT: "8080"
+  METRICS_ENABLED: "true"

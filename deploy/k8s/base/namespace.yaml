@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: creto-enablement
+  labels:
+    app.kubernetes.io/name: creto-enablement
+    app.kubernetes.io/part-of: creto-platform

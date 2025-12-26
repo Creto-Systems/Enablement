@@ -1,0 +1,43 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: creto-metering-pdb
+  namespace: creto-enablement
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: creto-metering
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: creto-oversight-pdb
+  namespace: creto-enablement
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: creto-oversight
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: creto-runtime-pdb
+  namespace: creto-enablement
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: creto-runtime
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: creto-messaging-pdb
+  namespace: creto-enablement
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: creto-messaging

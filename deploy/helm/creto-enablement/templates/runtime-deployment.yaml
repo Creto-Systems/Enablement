@@ -1,0 +1,173 @@
+{{- if .Values.runtime.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "creto-enablement.fullname" . }}-runtime
+  labels:
+    {{- include "creto-enablement.labels" . | nindent 4 }}
+    app.kubernetes.io/component: runtime
+spec:
+  {{- if not .Values.runtime.autoscaling.enabled }}
+  replicas: {{ .Values.runtime.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "creto-enablement.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: runtime
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.runtime.service.httpPort }}"
+        prometheus.io/path: "/metrics"
+      labels:
+        {{- include "creto-enablement.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: runtime
+    spec:
+      serviceAccountName: {{ include "creto-enablement.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: runtime
+          image: {{ include "creto-enablement.image" (dict "global" .Values.global "image" .Values.runtime.image) }}
+          imagePullPolicy: {{ .Values.runtime.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.runtime.service.grpcPort }}
+              protocol: TCP
+            - name: http
+              containerPort: {{ .Values.runtime.service.httpPort }}
+              protocol: TCP
+          env:
+            - name: LOG_LEVEL
+              value: {{ .Values.runtime.config.logLevel | quote }}
+            - name: GRPC_PORT
+              value: {{ .Values.runtime.service.grpcPort | quote }}
+            - name: HTTP_PORT
+              value: {{ .Values.runtime.service.httpPort | quote }}
+            - name: METRICS_ENABLED
+              value: {{ .Values.runtime.config.metricsEnabled | quote }}
+            - name: RUNTIME_TYPE
+              value: {{ .Values.runtime.config.runtimeType | quote }}
+            - name: WARM_POOL_SIZE
+              value: {{ .Values.runtime.config.warmPoolSize | quote }}
+            - name: WARM_POOL_MIN
+              value: {{ .Values.runtime.config.warmPoolMin | quote }}
+            - name: SANDBOX_TIMEOUT
+              value: {{ .Values.runtime.config.sandboxTimeout | quote }}
+            - name: MAX_CONCURRENT_SANDBOXES
+              value: {{ .Values.runtime.config.maxConcurrentSandboxes | quote }}
+            - name: NETWORK_POLICY_DEFAULT
+              value: {{ .Values.runtime.config.networkPolicyDefault | quote }}
+          resources:
+            {{- toYaml .Values.runtime.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: sandbox-data
+              mountPath: /var/lib/creto-runtime
+            {{- if eq .Values.runtime.config.runtimeType "gvisor" }}
+            - name: gvisor-runtime
+              mountPath: /run/containerd/runsc
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: sandbox-data
+          emptyDir:
+            sizeLimit: {{ .Values.runtime.config.sandboxDataLimit | default "10Gi" }}
+        {{- if eq .Values.runtime.config.runtimeType "gvisor" }}
+        - name: gvisor-runtime
+          hostPath:
+            path: /run/containerd/runsc
+            type: DirectoryOrCreate
+        {{- end }}
+      {{- with .Values.runtime.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.runtime.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "creto-enablement.fullname" . }}-runtime
+  labels:
+    {{- include "creto-enablement.labels" . | nindent 4 }}
+    app.kubernetes.io/component: runtime
+spec:
+  type: {{ .Values.runtime.service.type }}
+  ports:
+    - name: grpc
+      port: {{ .Values.runtime.service.grpcPort }}
+      targetPort: grpc
+    - name: http
+      port: {{ .Values.runtime.service.httpPort }}
+      targetPort: http
+  selector:
+    {{- include "creto-enablement.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: runtime
+{{- if .Values.runtime.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "creto-enablement.fullname" . }}-runtime
+  labels:
+    {{- include "creto-enablement.labels" . | nindent 4 }}
+    app.kubernetes.io/component: runtime
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "creto-enablement.fullname" . }}-runtime
+  minReplicas: {{ .Values.runtime.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.runtime.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.runtime.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.runtime.autoscaling.targetMemoryUtilizationPercentage | default 80 }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+      selectPolicy: Max
+{{- end }}
+{{- end }}
