@@ -35,3 +35,7 @@ tonic-build = { workspace = true }
 [[bench]]
 name = "ingestion"
 harness = false
+
+[[bench]]
+name = "quota"
+harness = false

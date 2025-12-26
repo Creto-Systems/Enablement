@@ -1,57 +1,36 @@
-//! Quota definition and enforcement.
-//!
-//! Quotas define limits on usage that can be enforced in real-time.
+//! Core quota types and definitions.
 
-use chrono::{DateTime, Utc};
-use creto_common::{AgentId, CretoResult, OrganizationId};
+use chrono::{DateTime, Datelike, Duration, TimeZone, Timelike, Utc};
+use creto_common::{AgentId, OrganizationId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// A quota definition that limits usage of a specific metric.
-///
-/// # Hierarchy
-///
-/// Quotas can be defined at multiple levels:
-/// - Organization (tenant-wide limits)
-/// - Team (department budgets)
-/// - Agent (individual agent limits)
-///
-/// The most specific quota takes precedence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Quota {
     /// Unique quota ID.
     pub id: Uuid,
-
     /// Organization this quota belongs to.
     pub organization_id: OrganizationId,
-
     /// Optional: Specific agent this quota applies to.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<AgentId>,
-
     /// Billable metric code this quota limits.
     pub metric_code: String,
-
     /// Maximum allowed usage per period.
     pub limit: i64,
-
     /// Reset period for the quota.
     pub period: QuotaPeriod,
-
     /// Current usage in this period.
     #[serde(default)]
     pub current_usage: i64,
-
     /// When the current period started.
     pub period_start: DateTime<Utc>,
-
     /// When the current period ends.
     pub period_end: DateTime<Utc>,
-
     /// Whether to allow overage (soft limit) or block (hard limit).
     #[serde(default)]
     pub allow_overage: bool,
-
     /// Optional: Budget in cents for cost-based quotas.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub budget_cents: Option<i64>,
@@ -142,8 +121,6 @@ impl Default for QuotaPeriod {
 impl QuotaPeriod {
     /// Calculate the start and end bounds for a period containing the given timestamp.
     pub fn calculate_bounds(&self, timestamp: DateTime<Utc>) -> (DateTime<Utc>, DateTime<Utc>) {
-        use chrono::{Datelike, Duration, TimeZone, Timelike};
-
         match self {
             QuotaPeriod::Hourly => {
                 let start = Utc
@@ -209,94 +186,16 @@ impl QuotaPeriod {
             }
         }
     }
-}
 
-/// Service for enforcing quotas in real-time.
-///
-/// Integrates with creto-authz for Cedar policy evaluation.
-pub struct QuotaEnforcer {
-    // TODO: Add fields for cache, database connection, authz client
-    _private: (),
-}
-
-impl QuotaEnforcer {
-    /// Create a new quota enforcer.
-    pub fn new() -> Self {
-        Self { _private: () }
-    }
-
-    /// Check if an operation is allowed under current quotas.
-    ///
-    /// Returns `Ok(())` if allowed, `Err(QuotaExceeded)` if blocked.
-    ///
-    /// # Performance
-    ///
-    /// Target: <10µs using in-memory bloom filter with Redis fallback.
-    pub async fn check(
-        &self,
-        organization_id: OrganizationId,
-        agent_id: AgentId,
-        metric_code: &str,
-        amount: i64,
-    ) -> CretoResult<()> {
-        // TODO: Implement actual quota checking
-        // 1. Check in-memory cache (bloom filter)
-        // 2. If uncertain, check Redis
-        // 3. If still uncertain, check PostgreSQL
-        // 4. Evaluate Cedar policy for dynamic limits
-
-        let _ = (organization_id, agent_id, metric_code, amount);
-
-        // Placeholder: Always allow
-        Ok(())
-    }
-
-    /// Record usage against a quota.
-    ///
-    /// Should be called after successful operation completion.
-    pub async fn record(
-        &self,
-        organization_id: OrganizationId,
-        agent_id: AgentId,
-        metric_code: &str,
-        amount: i64,
-    ) -> CretoResult<()> {
-        // TODO: Implement usage recording
-        // 1. Update Redis counter (atomic increment)
-        // 2. Async write to PostgreSQL
-        // 3. Update bloom filter
-
-        let _ = (organization_id, agent_id, metric_code, amount);
-
-        Ok(())
-    }
-
-    /// Get current quota status for an agent.
-    pub async fn get_status(
-        &self,
-        organization_id: OrganizationId,
-        agent_id: AgentId,
-        metric_code: &str,
-    ) -> CretoResult<QuotaStatus> {
-        // TODO: Implement status retrieval
-
-        let _ = (organization_id, agent_id, metric_code);
-
-        Ok(QuotaStatus {
-            metric_code: metric_code.to_string(),
-            limit: 1000,
-            used: 0,
-            remaining: 1000,
-            percentage_used: 0.0,
-            period: QuotaPeriod::Monthly,
-            resets_at: Utc::now() + chrono::Duration::days(30),
-        })
-    }
-}
-
-impl Default for QuotaEnforcer {
-    fn default() -> Self {
-        Self::new()
+    /// Get string representation.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Hourly => "hourly",
+            Self::Daily => "daily",
+            Self::Weekly => "weekly",
+            Self::Monthly => "monthly",
+            Self::Lifetime => "lifetime",
+        }
     }
 }
 
@@ -376,5 +275,14 @@ mod tests {
         assert!(start <= timestamp);
         assert!(timestamp < end);
         assert_eq!((end - start).num_hours(), 24);
+    }
+
+    #[test]
+    fn test_period_as_str() {
+        assert_eq!(QuotaPeriod::Hourly.as_str(), "hourly");
+        assert_eq!(QuotaPeriod::Daily.as_str(), "daily");
+        assert_eq!(QuotaPeriod::Weekly.as_str(), "weekly");
+        assert_eq!(QuotaPeriod::Monthly.as_str(), "monthly");
+        assert_eq!(QuotaPeriod::Lifetime.as_str(), "lifetime");
     }
 }

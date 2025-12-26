@@ -35,6 +35,13 @@
 //! - **gRPC Service**: High-performance ingestion service
 //! - **Benchmarks**: Target >10K events/sec throughput
 //!
+//! ## Week 4 Features
+//!
+//! - **Bloom Filter**: Fast quota existence check (<1µs)
+//! - **Quota Cache**: LRU cache with TTL (~5µs hits)
+//! - **Reservation System**: Pre-allocate quota before operations
+//! - **QuotaEnforcer**: Integrated enforcement with <10µs p99 latency
+//!
 //! ## Pattern Source
 //!
 //! Inspired by [Lago](https://github.com/getlago/lago) event ingestion patterns,
@@ -54,7 +61,11 @@ pub mod validation;
 pub use dedup::{DedupConfig, DedupResult, Deduplicator};
 pub use events::{UsageEvent, UsageEventType};
 pub use grpc::{MeteringGrpcService, MeteringServiceConfig};
-pub use quota::{Quota, QuotaEnforcer, QuotaPeriod};
+pub use quota::{
+    BloomConfig, CheckSource, EnforcerConfig, EnforcerError, Quota, QuotaBloomFilter,
+    QuotaCheckResult, QuotaEnforcer, QuotaKey, QuotaPeriod, QuotaStatus, Reservation,
+    ReservationError, ReservationStatus, ReservationStore, ReserveRequest,
+};
 pub use repository::{
     EventRepository, PgEventRepository,
     QuotaRepository, PgQuotaRepository,

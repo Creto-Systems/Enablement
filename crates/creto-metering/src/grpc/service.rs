@@ -115,16 +115,26 @@ impl<I: EventIngestion> MeteringGrpcService<I> {
         if self.config.enforce_quotas {
             let quota_result = self
                 .quota_enforcer
-                .check(event.organization_id, event.agent_id, &event.code, event.quantity)
-                .await;
+                .check(&event.organization_id, &event.agent_id, &event.code, event.quantity);
 
-            if let Err(e) = quota_result {
-                self.record_quota_exceeded().await;
-                return IngestEventResponse {
-                    success: false,
-                    status: IngestStatus::QuotaExceeded,
-                    error_message: Some(e.to_string()),
-                };
+            match quota_result {
+                Ok(check) if !check.allowed => {
+                    self.record_quota_exceeded().await;
+                    return IngestEventResponse {
+                        success: false,
+                        status: IngestStatus::QuotaExceeded,
+                        error_message: Some(format!("Quota exceeded: {}% used", check.usage_percentage * 100.0)),
+                    };
+                }
+                Err(e) => {
+                    self.record_quota_exceeded().await;
+                    return IngestEventResponse {
+                        success: false,
+                        status: IngestStatus::QuotaExceeded,
+                        error_message: Some(e.to_string()),
+                    };
+                }
+                Ok(_) => {} // Quota check passed
             }
         }
 
@@ -324,24 +334,16 @@ impl<I: EventIngestion> MeteringGrpcService<I> {
 
         let result = self
             .quota_enforcer
-            .check(org_id, agent_id, &request.metric_code, request.quantity)
-            .await;
+            .check(&org_id, &agent_id, &request.metric_code, request.quantity);
 
         match result {
-            Ok(()) => {
-                // Get current status for response
-                let status = self
-                    .quota_enforcer
-                    .get_status(org_id, agent_id, &request.metric_code)
-                    .await
-                    .unwrap_or_default();
-
+            Ok(check) => {
                 CheckQuotaResponse {
-                    allowed: true,
-                    current_usage: status.used,
-                    limit: status.limit,
-                    remaining: status.remaining,
-                    denial_reason: None,
+                    allowed: check.allowed,
+                    current_usage: check.current_usage,
+                    limit: check.limit,
+                    remaining: check.remaining,
+                    denial_reason: if check.allowed { None } else { Some("Quota exceeded".to_string()) },
                 }
             }
             Err(e) => CheckQuotaResponse {
@@ -368,22 +370,18 @@ impl<I: EventIngestion> MeteringGrpcService<I> {
             .map(creto_common::AgentId::from_uuid)
             .unwrap_or_else(creto_common::AgentId::new);
 
+        let org = creto_common::OrganizationId::from_uuid(org_id);
         let status = self
             .quota_enforcer
-            .get_status(
-                creto_common::OrganizationId::from_uuid(org_id),
-                agent_id,
-                &request.metric_code,
-            )
-            .await
+            .check(&org, &agent_id, &request.metric_code, 0)
             .ok()?;
 
         Some(GetQuotaStatusResponse {
-            metric_code: status.metric_code,
+            metric_code: request.metric_code.clone(),
             limit: status.limit,
-            current_usage: status.used,
+            current_usage: status.current_usage,
             remaining: status.remaining,
-            usage_percentage: status.percentage_used * 100.0, // Convert to percentage
+            usage_percentage: status.usage_percentage * 100.0, // Convert to percentage
             period: GrpcQuotaPeriod::Daily, // TODO: Map from actual period
             period_start: status.resets_at - chrono::Duration::days(1), // Approximate start
             period_end: status.resets_at,

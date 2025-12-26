@@ -17,18 +17,8 @@ use crate::quota::{Quota, QuotaPeriod};
 // Enum Serialization Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Convenience method for getting current bounds (wraps calculate_bounds)
 impl QuotaPeriod {
-    /// Convert to database string representation.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            QuotaPeriod::Hourly => "hourly",
-            QuotaPeriod::Daily => "daily",
-            QuotaPeriod::Weekly => "weekly",
-            QuotaPeriod::Monthly => "monthly",
-            QuotaPeriod::Lifetime => "lifetime",
-        }
-    }
-
     /// Get the current period bounds.
     pub fn current_bounds(&self) -> (DateTime<Utc>, DateTime<Utc>) {
         self.calculate_bounds(Utc::now())
