@@ -29,6 +29,7 @@ impl SandboxState {
             SandboxState::Stopped => "stopped",
             SandboxState::Failed => "failed",
             SandboxState::Terminated => "terminated",
+            SandboxState::Checkpointed { .. } => "checkpointed",
         }
     }
 

@@ -24,14 +24,21 @@
 pub mod sandbox;
 pub mod execution;
 pub mod metering;
+pub mod network;
 pub mod pool;
 pub mod repository;
 pub mod secrets;
 pub mod resources;
 pub mod service;
+pub mod attestation;
+pub mod checkpoint;
 
 pub use sandbox::{Sandbox, SandboxConfig, SandboxState, SandboxId};
 pub use execution::{ExecutionRequest, ExecutionResult, ExecutionStatus, ExecutionTiming, ExecutionError};
+pub use network::{
+    NetworkPolicy, EgressRule, EgressDestination, NetworkAction,
+    DnsPolicy, NetworkPolicyEnforcer, EgressDecision,
+};
 pub use pool::{WarmPool, PoolConfig};
 pub use repository::{
     SandboxRepository, PgSandboxRepository,
@@ -41,3 +48,11 @@ pub use repository::{
 pub use secrets::{SecretMount, SecretProvider};
 pub use resources::{ResourceLimits, ResourceUsage};
 pub use service::RuntimeService;
+pub use attestation::{
+    Attestation, AttestationPlatform, AttestationPolicy,
+    AttestationGenerator, AttestationVerifier, MockAttestationProvider,
+};
+pub use checkpoint::{
+    Checkpoint, CheckpointConfig, CheckpointId, CheckpointManager,
+    CheckpointError, InMemoryCheckpointStore, CompressionAlgorithm,
+};

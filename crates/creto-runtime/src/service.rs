@@ -3,9 +3,10 @@
 use creto_common::{AgentId, CretoError, CretoResult, OrganizationId};
 
 use crate::{
+    checkpoint::{CheckpointConfig, CheckpointId, CheckpointManager, InMemoryCheckpointStore},
     execution::{ExecutionRequest, ExecutionResult, Executor},
     pool::{PoolConfig, WarmPool},
-    sandbox::{Sandbox, SandboxConfig, SandboxId},
+    sandbox::{Sandbox, SandboxConfig, SandboxId, SandboxState},
     secrets::{SecretMount, SecretProvider},
 };
 
@@ -19,6 +20,9 @@ pub struct RuntimeService {
 
     /// Secret provider.
     secret_provider: Option<Box<dyn SecretProvider>>,
+
+    /// Checkpoint manager.
+    checkpoint_manager: Box<dyn CheckpointManager>,
 }
 
 impl RuntimeService {
@@ -28,6 +32,7 @@ impl RuntimeService {
             pool: WarmPool::new(PoolConfig::default()),
             executor: Executor::new(),
             secret_provider: None,
+            checkpoint_manager: Box::new(InMemoryCheckpointStore::new()),
         }
     }
 
@@ -37,12 +42,19 @@ impl RuntimeService {
             pool: WarmPool::new(config),
             executor: Executor::new(),
             secret_provider: None,
+            checkpoint_manager: Box::new(InMemoryCheckpointStore::new()),
         }
     }
 
     /// Set the secret provider.
     pub fn with_secret_provider(mut self, provider: Box<dyn SecretProvider>) -> Self {
         self.secret_provider = Some(provider);
+        self
+    }
+
+    /// Set the checkpoint manager.
+    pub fn with_checkpoint_manager(mut self, manager: Box<dyn CheckpointManager>) -> Self {
+        self.checkpoint_manager = manager;
         self
     }
 
@@ -155,6 +167,94 @@ impl RuntimeService {
         let removed = self.pool.cleanup_idle().await?;
         Ok(removed.len())
     }
+
+    /// Create a checkpoint of a sandbox.
+    ///
+    /// The sandbox must be in a state that allows checkpointing (Ready, Paused, or Stopped).
+    /// Returns the ID of the created checkpoint.
+    pub async fn checkpoint(&self, sandbox_id: SandboxId) -> CretoResult<CheckpointId> {
+        // TODO: Get the actual sandbox from pool or repository
+        // For now, use default config
+        let config = CheckpointConfig::default();
+
+        tracing::info!(
+            sandbox_id = %sandbox_id,
+            "Creating checkpoint for sandbox"
+        );
+
+        let checkpoint_id = self.checkpoint_manager.checkpoint(sandbox_id, config).await?;
+
+        tracing::info!(
+            sandbox_id = %sandbox_id,
+            checkpoint_id = %checkpoint_id,
+            "Checkpoint created successfully"
+        );
+
+        Ok(checkpoint_id)
+    }
+
+    /// Restore a sandbox from a checkpoint.
+    ///
+    /// Creates a new sandbox (or reuses an existing one) and restores it to the
+    /// state captured in the checkpoint.
+    pub async fn restore(&self, checkpoint_id: CheckpointId) -> CretoResult<Sandbox> {
+        tracing::info!(
+            checkpoint_id = %checkpoint_id,
+            "Restoring sandbox from checkpoint"
+        );
+
+        let sandbox_id = self.checkpoint_manager.restore(checkpoint_id).await?;
+
+        // TODO: Actually create/retrieve the sandbox instance
+        // For now, create a mock sandbox
+        let checkpoint = self.checkpoint_manager.get_checkpoint(checkpoint_id).await?;
+
+        let mut sandbox = Sandbox::new(
+            OrganizationId::new(),
+            checkpoint.agent_id,
+            SandboxConfig::default(),
+        );
+        sandbox.id = sandbox_id;
+        sandbox.state = SandboxState::Ready;
+
+        tracing::info!(
+            checkpoint_id = %checkpoint_id,
+            sandbox_id = %sandbox_id,
+            "Sandbox restored successfully"
+        );
+
+        Ok(sandbox)
+    }
+
+    /// List checkpoints, optionally filtered by sandbox or agent.
+    pub async fn list_checkpoints(
+        &self,
+        sandbox_id: Option<SandboxId>,
+        agent_id: Option<AgentId>,
+    ) -> CretoResult<Vec<crate::checkpoint::Checkpoint>> {
+        self.checkpoint_manager
+            .list_checkpoints(sandbox_id, agent_id)
+            .await
+    }
+
+    /// Delete a checkpoint.
+    pub async fn delete_checkpoint(&self, checkpoint_id: CheckpointId) -> CretoResult<()> {
+        tracing::info!(
+            checkpoint_id = %checkpoint_id,
+            "Deleting checkpoint"
+        );
+
+        self.checkpoint_manager
+            .delete_checkpoint(checkpoint_id)
+            .await?;
+
+        tracing::info!(
+            checkpoint_id = %checkpoint_id,
+            "Checkpoint deleted successfully"
+        );
+
+        Ok(())
+    }
 }
 
 impl Default for RuntimeService {
@@ -205,5 +305,84 @@ mod tests {
 
         let result = service.execute(sandbox.id, "print('hello')").await.unwrap();
         assert!(result.is_success());
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_and_restore() {
+        let service = RuntimeService::new();
+
+        let sandbox = service
+            .create_sandbox(
+                OrganizationId::new(),
+                AgentId::new(),
+                SandboxConfig::default(),
+            )
+            .await
+            .unwrap();
+
+        // Create checkpoint
+        let checkpoint_id = service.checkpoint(sandbox.id).await.unwrap();
+        assert!(!checkpoint_id.to_string().is_empty());
+
+        // Restore from checkpoint
+        let restored = service.restore(checkpoint_id).await.unwrap();
+        assert_eq!(restored.state, SandboxState::Ready);
+    }
+
+    #[tokio::test]
+    async fn test_list_checkpoints() {
+        let service = RuntimeService::new();
+        let sandbox_id = SandboxId::new();
+
+        // Create multiple checkpoints
+        service.checkpoint(sandbox_id).await.unwrap();
+        service.checkpoint(sandbox_id).await.unwrap();
+
+        let checkpoints = service.list_checkpoints(Some(sandbox_id), None).await.unwrap();
+        assert_eq!(checkpoints.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_delete_checkpoint() {
+        let service = RuntimeService::new();
+        let sandbox_id = SandboxId::new();
+
+        let checkpoint_id = service.checkpoint(sandbox_id).await.unwrap();
+
+        // Delete should succeed
+        service.delete_checkpoint(checkpoint_id).await.unwrap();
+
+        // Deleting again should fail
+        let result = service.delete_checkpoint(checkpoint_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_state_transitions() {
+        let service = RuntimeService::new();
+        let mut sandbox = Sandbox::new(
+            OrganizationId::new(),
+            AgentId::new(),
+            SandboxConfig::default(),
+        );
+
+        // Can't checkpoint while Creating
+        assert!(!sandbox.state.can_checkpoint());
+
+        // Can checkpoint when Ready
+        sandbox.mark_ready("handle".to_string());
+        assert!(sandbox.state.can_checkpoint());
+
+        // Can't checkpoint when Running
+        sandbox.mark_running();
+        assert!(!sandbox.state.can_checkpoint());
+
+        // Can't checkpoint when Failed
+        sandbox.mark_failed();
+        assert!(!sandbox.state.can_checkpoint());
+
+        // Can't checkpoint when Terminated
+        sandbox.mark_terminated();
+        assert!(!sandbox.state.can_checkpoint());
     }
 }

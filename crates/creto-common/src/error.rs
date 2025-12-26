@@ -135,6 +135,21 @@ pub enum CretoError {
     // ─────────────────────────────────────────────────────────────────────────
     #[error("Serialization error: {0}")]
     SerializationError(String),
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Generic Errors
+    // ─────────────────────────────────────────────────────────────────────────
+    #[error("Resource not found: {0}")]
+    NotFound(String),
+
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("Limit exceeded: {0}")]
+    LimitExceeded(String),
+
+    #[error("Validation failed: {0}")]
+    ValidationFailed(String),
 }
 
 #[cfg(feature = "sqlx")]

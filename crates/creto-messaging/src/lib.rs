@@ -34,6 +34,7 @@ pub mod repository;
 pub mod session;
 pub mod channel;
 pub mod service;
+pub mod topic;
 
 pub use keys::{KeyBundle, IdentityKey, PreKey, SignedPreKey};
 pub use x3dh::{X3DHParams, X3DHResult};
@@ -49,3 +50,7 @@ pub use repository::{
 pub use session::{Session, SessionState};
 pub use channel::{Channel, ChannelType, ChannelConfig};
 pub use service::MessagingService;
+pub use topic::{
+    Topic, TopicId, TopicPolicy, TopicConfig, TopicManager,
+    Subscription, SubscriptionId, SubscriptionFilter,
+};

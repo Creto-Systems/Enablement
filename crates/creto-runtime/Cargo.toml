@@ -30,6 +30,9 @@ async-trait = { workspace = true }
 # Tracing
 tracing = { workspace = true }
 
+# Cryptography
+blake3 = { workspace = true }
+
 # Database
 sqlx = { workspace = true }
 

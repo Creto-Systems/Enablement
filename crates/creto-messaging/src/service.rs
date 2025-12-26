@@ -12,6 +12,7 @@ use crate::{
     envelope::{DeliveryReceipt, Envelope},
     keys::{KeyBundle, KeyStore},
     session::{Session, SessionState, SessionStore},
+    topic::{Subscription, SubscriptionFilter, TopicConfig, TopicId, TopicManager},
     x3dh::X3DH,
 };
 
@@ -31,6 +32,9 @@ pub struct MessagingService {
 
     /// Local agent's key bundle.
     local_bundle: Option<KeyBundle>,
+
+    /// Topic manager for pub/sub.
+    topic_manager: Arc<RwLock<TopicManager>>,
 }
 
 impl MessagingService {
@@ -42,6 +46,7 @@ impl MessagingService {
             channel_router: Arc::new(RwLock::new(ChannelRouter::new())),
             sessions: Arc::new(RwLock::new(HashMap::new())),
             local_bundle: None,
+            topic_manager: Arc::new(RwLock::new(TopicManager::new())),
         }
     }
 
@@ -265,6 +270,70 @@ impl MessagingService {
             .filter(|(_, s)| s.is_active())
             .map(|(id, _)| *id)
             .collect()
+    }
+
+    /// Create a new topic.
+    pub async fn create_topic(&self, config: TopicConfig) -> CretoResult<TopicId> {
+        let mut manager = self.topic_manager.write().await;
+        manager.create_topic(config)
+    }
+
+    /// Subscribe to a topic.
+    pub async fn subscribe(
+        &self,
+        topic_id: TopicId,
+        filter: Option<SubscriptionFilter>,
+    ) -> CretoResult<Subscription> {
+        let local_bundle = self.local_bundle.as_ref().ok_or_else(|| {
+            creto_common::CretoError::SessionError("Service not initialized".to_string())
+        })?;
+
+        let mut manager = self.topic_manager.write().await;
+        manager.subscribe(topic_id, local_bundle.agent_id, filter)
+    }
+
+    /// Publish a message to a topic.
+    pub async fn publish(
+        &self,
+        topic_id: TopicId,
+        message: &[u8],
+        metadata: std::collections::HashMap<String, String>,
+    ) -> CretoResult<Vec<AgentId>> {
+        let local_bundle = self.local_bundle.as_ref().ok_or_else(|| {
+            creto_common::CretoError::SessionError("Service not initialized".to_string())
+        })?;
+
+        let mut manager = self.topic_manager.write().await;
+        manager.publish(topic_id, local_bundle.agent_id, message, metadata)
+    }
+
+    /// Unsubscribe from a topic.
+    pub async fn unsubscribe(&self, subscription_id: Uuid) -> CretoResult<()> {
+        let local_bundle = self.local_bundle.as_ref().ok_or_else(|| {
+            creto_common::CretoError::SessionError("Service not initialized".to_string())
+        })?;
+
+        let mut manager = self.topic_manager.write().await;
+        manager.unsubscribe(subscription_id, local_bundle.agent_id)
+    }
+
+    /// Delete a topic.
+    pub async fn delete_topic(&self, topic_id: TopicId) -> CretoResult<()> {
+        let local_bundle = self.local_bundle.as_ref().ok_or_else(|| {
+            creto_common::CretoError::SessionError("Service not initialized".to_string())
+        })?;
+
+        let mut manager = self.topic_manager.write().await;
+        manager.delete_topic(topic_id, local_bundle.agent_id)
+    }
+
+    /// List subscribers to a topic.
+    pub async fn list_topic_subscribers(
+        &self,
+        topic_id: TopicId,
+    ) -> CretoResult<Vec<Subscription>> {
+        let manager = self.topic_manager.read().await;
+        manager.list_subscribers(topic_id)
     }
 }
 

@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::resources::ResourceLimits;
+use crate::network::NetworkPolicy as DetailedNetworkPolicy;
+use crate::attestation::{Attestation, AttestationPolicy};
 
 /// Unique identifier for a sandbox instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -49,8 +51,12 @@ pub struct SandboxConfig {
     /// Resource limits for the sandbox.
     pub limits: ResourceLimits,
 
-    /// Network access policy.
+    /// Network access policy (simple enum).
     pub network_policy: NetworkPolicy,
+
+    /// Detailed network policy for egress enforcement (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detailed_network_policy: Option<DetailedNetworkPolicy>,
 
     /// Filesystem mounts.
     #[serde(default)]
@@ -79,6 +85,7 @@ impl Default for SandboxConfig {
             runtime: "python3.11".to_string(),
             limits: ResourceLimits::default(),
             network_policy: NetworkPolicy::Restricted,
+            detailed_network_policy: None,
             mounts: Vec::new(),
             environment: Vec::new(),
             timeout_seconds: default_timeout(),
@@ -124,8 +131,8 @@ pub struct EnvVar {
 }
 
 /// Current state of a sandbox.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type", content = "data")]
 pub enum SandboxState {
     /// Being created.
     Creating,
@@ -141,6 +148,8 @@ pub enum SandboxState {
     Failed,
     /// Terminated and cleaned up.
     Terminated,
+    /// Checkpointed with the given checkpoint ID.
+    Checkpointed { checkpoint_id: String },
 }
 
 impl SandboxState {
@@ -152,6 +161,14 @@ impl SandboxState {
     /// Check if the sandbox is terminal (can't be used anymore).
     pub fn is_terminal(&self) -> bool {
         matches!(self, SandboxState::Failed | SandboxState::Terminated)
+    }
+
+    /// Check if the sandbox can be checkpointed.
+    pub fn can_checkpoint(&self) -> bool {
+        matches!(
+            self,
+            SandboxState::Ready | SandboxState::Paused | SandboxState::Stopped
+        )
     }
 }
 
@@ -183,6 +200,14 @@ pub struct Sandbox {
     /// Internal runtime handle (opaque string).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub runtime_handle: Option<String>,
+
+    /// Cryptographic attestation proving sandbox security.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attestation: Option<Attestation>,
+
+    /// Policy controlling attestation requirements.
+    #[serde(default)]
+    pub attestation_policy: AttestationPolicy,
 }
 
 impl Sandbox {
@@ -201,6 +226,8 @@ impl Sandbox {
             created_at: Utc::now(),
             last_used_at: None,
             runtime_handle: None,
+            attestation: None,
+            attestation_policy: AttestationPolicy::default(),
         }
     }
 
@@ -232,6 +259,25 @@ impl Sandbox {
         let last_activity = self.last_used_at.unwrap_or(self.created_at);
         let idle_duration = Utc::now().signed_duration_since(last_activity);
         idle_duration.num_seconds() as u64 > idle_timeout_seconds
+    }
+
+    /// Create a checkpoint of this sandbox.
+    ///
+    /// This is a placeholder method that will be implemented by the checkpoint module.
+    /// In a real implementation, this would delegate to CheckpointManager.
+    pub async fn checkpoint(&self) -> CretoResult<String> {
+        use creto_common::CretoError;
+
+        if !self.state.can_checkpoint() {
+            return Err(CretoError::InvalidStateTransition {
+                from: format!("{:?}", self.state),
+                to: "checkpointed".to_string(),
+            });
+        }
+
+        // Mock checkpoint creation - returns a checkpoint ID
+        let checkpoint_id = Uuid::now_v7();
+        Ok(format!("checkpoint_{}", checkpoint_id))
     }
 }
 
