@@ -1,0 +1,30 @@
+[package]
+name = "creto-messaging-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# Exclude from parent workspace
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+creto-messaging = { path = ".." }
+creto-common = { path = "../../creto-common" }
+
+[[bin]]
+name = "envelope_deserialize"
+path = "fuzz_targets/envelope_deserialize.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "topic_config_parse"
+path = "fuzz_targets/topic_config_parse.rs"
+test = false
+doc = false
+bench = false

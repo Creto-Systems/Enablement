@@ -1,0 +1,29 @@
+[package]
+name = "creto-common-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# Exclude from parent workspace
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+creto-common = { path = ".." }
+
+[[bin]]
+name = "identity_parse"
+path = "fuzz_targets/identity_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "error_format"
+path = "fuzz_targets/error_format.rs"
+test = false
+doc = false
+bench = false

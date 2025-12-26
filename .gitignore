@@ -22,6 +22,11 @@ Cargo.lock
 coverage/
 *.lcov
 
+# Fuzz testing artifacts
+**/fuzz/target/
+**/fuzz/corpus/
+**/fuzz/artifacts/
+
 # Logs
 *.log
 logs/
