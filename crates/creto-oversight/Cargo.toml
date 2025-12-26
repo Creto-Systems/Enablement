@@ -35,4 +35,9 @@ channels = ["dep:reqwest", "dep:sha2", "dep:base64", "dep:urlencoding"]
 
 [dev-dependencies]
 proptest = { workspace = true }
-tokio = { workspace = true, features = ["test-util", "macros"] }
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+criterion = { workspace = true }
+
+[[bench]]
+name = "policy"
+harness = false

@@ -45,3 +45,8 @@ metering = ["dep:creto-metering"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+criterion = { workspace = true }
+
+[[bench]]
+name = "sandbox"
+harness = false
