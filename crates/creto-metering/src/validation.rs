@@ -64,6 +64,24 @@ impl ValidationError {
                 | ValidationError::EmptyMetricCode
         )
     }
+
+    /// Return the error code for this error variant.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::EmptyTransactionId => "ENABLE-100",
+            Self::TransactionIdTooLong { .. } => "ENABLE-101",
+            Self::NonPositiveQuantity(_) => "ENABLE-102",
+            Self::QuantityTooLarge { .. } => "ENABLE-103",
+            Self::TimestampTooFuture { .. } => "ENABLE-104",
+            Self::TimestampTooOld { .. } => "ENABLE-105",
+            Self::EmptyMetricCode => "ENABLE-106",
+            Self::InvalidMetricCode(_) => "ENABLE-107",
+            Self::PropertiesTooLarge { .. } => "ENABLE-108",
+            Self::DelegationDepthTooDeep { .. } => "ENABLE-109",
+            Self::ExternalSubscriptionIdTooLong { .. } => "ENABLE-110",
+            Self::Multiple(_) => "ENABLE-111",
+        }
+    }
 }
 
 /// Configuration for event validation.

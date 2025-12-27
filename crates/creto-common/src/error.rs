@@ -152,6 +152,69 @@ pub enum CretoError {
     ValidationFailed(String),
 }
 
+impl CretoError {
+    /// Return the error code for this error variant.
+    pub fn code(&self) -> &'static str {
+        match self {
+            // Metering Errors (ENABLE-001 to ENABLE-004)
+            Self::QuotaExceeded { .. } => "ENABLE-001",
+            Self::InvalidUsageEvent(_) => "ENABLE-002",
+            Self::DuplicateTransaction(_) => "ENABLE-003",
+            Self::BillingPeriodNotFound(_) => "ENABLE-004",
+
+            // Oversight Errors (ENABLE-005 to ENABLE-009)
+            Self::ApprovalNotFound(_) => "ENABLE-005",
+            Self::InvalidStateTransition { .. } => "ENABLE-006",
+            Self::ApprovalTimeout { .. } => "ENABLE-007",
+            Self::QuorumNotReached { .. } => "ENABLE-008",
+            Self::UnauthorizedApprover(_) => "ENABLE-009",
+
+            // Runtime Errors (ENABLE-010 to ENABLE-014)
+            Self::SandboxNotFound(_) => "ENABLE-010",
+            Self::SandboxCreationFailed(_) => "ENABLE-011",
+            Self::ExecutionTimeout { .. } => "ENABLE-012",
+            Self::ResourceLimitExceeded { .. } => "ENABLE-013",
+            Self::NetworkEgressDenied { .. } => "ENABLE-014",
+
+            // Messaging Errors (ENABLE-015 to ENABLE-019)
+            Self::ChannelNotFound(_) => "ENABLE-015",
+            Self::EncryptionFailed(_) => "ENABLE-016",
+            Self::DecryptionFailed(_) => "ENABLE-017",
+            Self::InvalidKeyBundle(_) => "ENABLE-018",
+            Self::MessageDeliveryFailed(_) => "ENABLE-019",
+
+            // Authorization Errors (ENABLE-020 to ENABLE-021)
+            Self::AuthorizationDenied(_) => "ENABLE-020",
+            Self::PolicyEvaluationFailed(_) => "ENABLE-021",
+
+            // Infrastructure Errors (ENABLE-022 to ENABLE-024)
+            Self::Database(_) => "ENABLE-022",
+            Self::Configuration(_) => "ENABLE-023",
+            Self::Internal(_) => "ENABLE-024",
+
+            // Crypto Errors (ENABLE-025 to ENABLE-026)
+            Self::CryptoError(_) => "ENABLE-025",
+            Self::SecretResolutionFailed { .. } => "ENABLE-026",
+
+            // Session Errors (ENABLE-027 to ENABLE-028)
+            Self::SessionError(_) => "ENABLE-027",
+            Self::ChannelError(_) => "ENABLE-028",
+
+            // Additional Authorization Errors (ENABLE-029)
+            Self::NotAuthorized { .. } => "ENABLE-029",
+
+            // Serialization Errors (ENABLE-030)
+            Self::SerializationError(_) => "ENABLE-030",
+
+            // Generic Errors (ENABLE-031 to ENABLE-034)
+            Self::NotFound(_) => "ENABLE-031",
+            Self::Unauthorized(_) => "ENABLE-032",
+            Self::LimitExceeded(_) => "ENABLE-033",
+            Self::ValidationFailed(_) => "ENABLE-034",
+        }
+    }
+}
+
 #[cfg(feature = "sqlx")]
 impl From<sqlx::Error> for CretoError {
     fn from(err: sqlx::Error) -> Self {

@@ -148,6 +148,20 @@ pub enum ReservationError {
     LockError(String),
 }
 
+impl ReservationError {
+    /// Return the error code for this error variant.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::InsufficientQuota { .. } => "ENABLE-400",
+            Self::NotFound(_) => "ENABLE-401",
+            Self::InvalidStatus(_) => "ENABLE-402",
+            Self::ExceedsReserved { .. } => "ENABLE-403",
+            Self::Expired(_) => "ENABLE-404",
+            Self::LockError(_) => "ENABLE-405",
+        }
+    }
+}
+
 /// In-memory reservation store for local testing.
 /// Production uses PostgreSQL + Redis.
 pub struct ReservationStore {

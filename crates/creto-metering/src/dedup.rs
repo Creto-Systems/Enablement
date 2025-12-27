@@ -38,6 +38,16 @@ pub enum DedupError {
     Unavailable,
 }
 
+impl DedupError {
+    /// Return the error code for this error variant.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Connection(_) => "ENABLE-200",
+            Self::Unavailable => "ENABLE-201",
+        }
+    }
+}
+
 /// Configuration for deduplication.
 #[derive(Debug, Clone)]
 pub struct DedupConfig {

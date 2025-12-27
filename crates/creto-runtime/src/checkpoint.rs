@@ -269,6 +269,21 @@ impl std::fmt::Display for CheckpointError {
 
 impl std::error::Error for CheckpointError {}
 
+impl CheckpointError {
+    /// Return the error code for this error variant.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::NotFound { .. } => "ENABLE-500",
+            Self::InvalidSandboxState { .. } => "ENABLE-501",
+            Self::CreationFailed { .. } => "ENABLE-502",
+            Self::RestoreFailed { .. } => "ENABLE-503",
+            Self::IntegrityCheckFailed { .. } => "ENABLE-504",
+            Self::CompressionError { .. } => "ENABLE-505",
+            Self::StorageError { .. } => "ENABLE-506",
+        }
+    }
+}
+
 impl From<CheckpointError> for CretoError {
     fn from(err: CheckpointError) -> Self {
         CretoError::Internal(err.to_string())

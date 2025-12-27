@@ -145,6 +145,18 @@ pub enum EnforcerError {
     RedisError(String),
 }
 
+impl EnforcerError {
+    /// Return the error code for this error variant.
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::QuotaExceeded { .. } => "ENABLE-300",
+            Self::ReservationError(_) => "ENABLE-301",
+            Self::CacheError(_) => "ENABLE-302",
+            Self::RedisError(_) => "ENABLE-303",
+        }
+    }
+}
+
 /// Cached quota entry.
 #[derive(Debug, Clone)]
 struct CachedQuota {
