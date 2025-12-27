@@ -15,7 +15,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::bloom::{BloomConfig, QuotaBloomFilter};
-use super::reservation::{ReservationStore, ReserveRequest, ReservationError};
+use super::reservation::{ReservationError, ReservationStore, ReserveRequest};
 use crate::quota::{Quota, QuotaPeriod};
 
 /// Result of a quota check.
@@ -43,14 +43,25 @@ pub struct QuotaCheckResult {
 
 impl QuotaCheckResult {
     /// Create an "allow" result.
-    pub fn allow(usage: i64, limit: i64, period: QuotaPeriod, resets_at: DateTime<Utc>, source: CheckSource, latency_ns: u64) -> Self {
+    pub fn allow(
+        usage: i64,
+        limit: i64,
+        period: QuotaPeriod,
+        resets_at: DateTime<Utc>,
+        source: CheckSource,
+        latency_ns: u64,
+    ) -> Self {
         let remaining = (limit - usage).max(0);
         Self {
             allowed: true,
             current_usage: usage,
             limit,
             remaining,
-            usage_percentage: if limit > 0 { usage as f64 / limit as f64 } else { 0.0 },
+            usage_percentage: if limit > 0 {
+                usage as f64 / limit as f64
+            } else {
+                0.0
+            },
             period,
             resets_at,
             source,
@@ -59,13 +70,24 @@ impl QuotaCheckResult {
     }
 
     /// Create a "deny" result.
-    pub fn deny(usage: i64, limit: i64, period: QuotaPeriod, resets_at: DateTime<Utc>, source: CheckSource, latency_ns: u64) -> Self {
+    pub fn deny(
+        usage: i64,
+        limit: i64,
+        period: QuotaPeriod,
+        resets_at: DateTime<Utc>,
+        source: CheckSource,
+        latency_ns: u64,
+    ) -> Self {
         Self {
             allowed: false,
             current_usage: usage,
             limit,
             remaining: 0,
-            usage_percentage: if limit > 0 { usage as f64 / limit as f64 } else { 1.0 },
+            usage_percentage: if limit > 0 {
+                usage as f64 / limit as f64
+            } else {
+                1.0
+            },
             period,
             resets_at,
             source,
@@ -251,10 +273,9 @@ impl QuotaEnforcer {
         if agent_might_exist {
             if let Some(cached) = self.get_cached(&agent_key) {
                 if !cached.is_stale(self.config.cache_ttl_ms) {
-                    let reserved = self.reservations.get_total_reserved(
-                        *organization_id.as_uuid(),
-                        metric_code,
-                    );
+                    let reserved = self
+                        .reservations
+                        .get_total_reserved(*organization_id.as_uuid(), metric_code);
                     let effective_usage = cached.usage + reserved;
 
                     let result = if effective_usage + amount <= cached.limit {
@@ -286,10 +307,9 @@ impl QuotaEnforcer {
         if org_might_exist {
             if let Some(cached) = self.get_cached(&org_key) {
                 if !cached.is_stale(self.config.cache_ttl_ms) {
-                    let reserved = self.reservations.get_total_reserved(
-                        *organization_id.as_uuid(),
-                        metric_code,
-                    );
+                    let reserved = self
+                        .reservations
+                        .get_total_reserved(*organization_id.as_uuid(), metric_code);
                     let effective_usage = cached.usage + reserved;
 
                     let result = if effective_usage + amount <= cached.limit {
@@ -319,7 +339,15 @@ impl QuotaEnforcer {
 
         // Step 3: Look up from storage (Redis in production)
         // Try agent-specific first, fallback to org-level
-        let result = self.lookup_quota_with_fallback(&agent_key, &org_key, organization_id, agent_id, metric_code, amount, start)?;
+        let result = self.lookup_quota_with_fallback(
+            &agent_key,
+            &org_key,
+            organization_id,
+            agent_id,
+            metric_code,
+            amount,
+            start,
+        )?;
 
         Ok(result)
     }
@@ -372,7 +400,8 @@ impl QuotaEnforcer {
             agent_id.to_string(),
             metric_code,
             amount,
-        ).with_ttl(ttl_seconds);
+        )
+        .with_ttl(ttl_seconds);
 
         let reservation = self.reservations.reserve(request, available)?;
 
@@ -389,7 +418,9 @@ impl QuotaEnforcer {
 
         // Record actual usage
         let org_id = OrganizationId::from_uuid(reservation.organization_id);
-        let agent_id = AgentId::from_uuid(Uuid::parse_str(&reservation.agent_id).unwrap_or_else(|_| Uuid::new_v4()));
+        let agent_id = AgentId::from_uuid(
+            Uuid::parse_str(&reservation.agent_id).unwrap_or_else(|_| Uuid::new_v4()),
+        );
 
         self.record_usage(&org_id, &agent_id, &reservation.metric_code, actual_amount)?;
 
@@ -419,14 +450,24 @@ impl QuotaEnforcer {
 
     // Helper methods
 
-    fn make_key(&self, org_id: &OrganizationId, agent_id: Option<&AgentId>, metric_code: &str) -> String {
+    fn make_key(
+        &self,
+        org_id: &OrganizationId,
+        agent_id: Option<&AgentId>,
+        metric_code: &str,
+    ) -> String {
         match agent_id {
             Some(aid) => format!("{}:{}:{}", org_id.as_uuid(), aid, metric_code),
             None => format!("{}:*:{}", org_id.as_uuid(), metric_code),
         }
     }
 
-    fn make_key_from_ids(&self, org_id: &OrganizationId, agent_id: &AgentId, metric_code: &str) -> String {
+    fn make_key_from_ids(
+        &self,
+        org_id: &OrganizationId,
+        agent_id: &AgentId,
+        metric_code: &str,
+    ) -> String {
         format!("{}:{}:{}", org_id.as_uuid(), agent_id, metric_code)
     }
 
@@ -463,24 +504,28 @@ impl QuotaEnforcer {
         start: Instant,
     ) -> Result<QuotaCheckResult, EnforcerError> {
         // Look up from local storage (Redis in production)
-        let quotas = self.quotas.read()
+        let quotas = self
+            .quotas
+            .read()
             .map_err(|e| EnforcerError::CacheError(e.to_string()))?;
 
         if let Some(quota) = quotas.get(key) {
-            let reserved = self.reservations.get_total_reserved(
-                *organization_id.as_uuid(),
-                metric_code,
-            );
+            let reserved = self
+                .reservations
+                .get_total_reserved(*organization_id.as_uuid(), metric_code);
             let effective_usage = quota.current_usage + reserved;
 
             // Cache for future lookups
-            self.set_cached(key.to_string(), CachedQuota {
-                usage: quota.current_usage,
-                limit: quota.limit,
-                period: quota.period,
-                resets_at: quota.period_end,
-                cached_at: Instant::now(),
-            });
+            self.set_cached(
+                key.to_string(),
+                CachedQuota {
+                    usage: quota.current_usage,
+                    limit: quota.limit,
+                    period: quota.period,
+                    resets_at: quota.period_end,
+                    cached_at: Instant::now(),
+                },
+            );
 
             let result = if effective_usage + amount <= quota.limit {
                 QuotaCheckResult::allow(
@@ -510,7 +555,10 @@ impl QuotaEnforcer {
                 start.elapsed().as_nanos() as u64,
             ))
         } else {
-            Err(EnforcerError::CacheError(format!("Quota not found: {}", key)))
+            Err(EnforcerError::CacheError(format!(
+                "Quota not found: {}",
+                key
+            )))
         }
     }
 
@@ -527,19 +575,35 @@ impl QuotaEnforcer {
         start: Instant,
     ) -> Result<QuotaCheckResult, EnforcerError> {
         // Try agent-specific key first
-        let quotas = self.quotas.read()
+        let quotas = self
+            .quotas
+            .read()
             .map_err(|e| EnforcerError::CacheError(e.to_string()))?;
 
         // First try agent-specific quota
         if quotas.get(agent_key).is_some() {
             drop(quotas);
-            return self.lookup_quota(agent_key, organization_id, agent_id, metric_code, amount, start);
+            return self.lookup_quota(
+                agent_key,
+                organization_id,
+                agent_id,
+                metric_code,
+                amount,
+                start,
+            );
         }
 
         // Fall back to org-level quota
         if quotas.get(org_key).is_some() {
             drop(quotas);
-            return self.lookup_quota(org_key, organization_id, agent_id, metric_code, amount, start);
+            return self.lookup_quota(
+                org_key,
+                organization_id,
+                agent_id,
+                metric_code,
+                amount,
+                start,
+            );
         }
 
         // No quota found at all
@@ -550,12 +614,17 @@ impl QuotaEnforcer {
                 start.elapsed().as_nanos() as u64,
             ))
         } else {
-            Err(EnforcerError::CacheError(format!("Quota not found: {} or {}", agent_key, org_key)))
+            Err(EnforcerError::CacheError(format!(
+                "Quota not found: {} or {}",
+                agent_key, org_key
+            )))
         }
     }
 
     fn get_available_quota(&self, key: &str) -> Result<i64, EnforcerError> {
-        let quotas = self.quotas.read()
+        let quotas = self
+            .quotas
+            .read()
             .map_err(|e| EnforcerError::CacheError(e.to_string()))?;
 
         if let Some(quota) = quotas.get(key) {
@@ -621,7 +690,9 @@ mod tests {
         quota.agent_id = Some(agent_id.clone());
         enforcer.register_quota(&quota);
 
-        let result = enforcer.check(&org_id, &agent_id, "api_calls", 100).unwrap();
+        let result = enforcer
+            .check(&org_id, &agent_id, "api_calls", 100)
+            .unwrap();
 
         assert!(result.allowed);
         assert_eq!(result.remaining, 1000);
@@ -654,7 +725,9 @@ mod tests {
         quota.agent_id = Some(agent_id.clone());
         enforcer.register_quota(&quota);
 
-        enforcer.record_usage(&org_id, &agent_id, "api_calls", 100).unwrap();
+        enforcer
+            .record_usage(&org_id, &agent_id, "api_calls", 100)
+            .unwrap();
 
         let result = enforcer.check(&org_id, &agent_id, "api_calls", 0).unwrap();
         assert_eq!(result.current_usage, 100);
@@ -671,7 +744,9 @@ mod tests {
         enforcer.register_quota(&quota);
 
         // Reserve 500 tokens
-        let reservation_id = enforcer.reserve(&org_id, &agent_id, "tokens", 500, 300).unwrap();
+        let reservation_id = enforcer
+            .reserve(&org_id, &agent_id, "tokens", 500, 300)
+            .unwrap();
 
         // Check shows reserved amount subtracted from remaining
         let result = enforcer.check(&org_id, &agent_id, "tokens", 0).unwrap();
@@ -684,7 +759,9 @@ mod tests {
         // After commit, reservation is no longer counted - quota should be updated
         // Since we're using in-memory storage, the usage update depends on key matching
         // Just verify the reservation was committed (no longer reserved)
-        let reserved = enforcer.reservations.get_total_reserved(*org_id.as_uuid(), "tokens");
+        let reserved = enforcer
+            .reservations
+            .get_total_reserved(*org_id.as_uuid(), "tokens");
         assert_eq!(reserved, 0, "No more active reservations after commit");
     }
 
@@ -700,7 +777,10 @@ mod tests {
 
         // First check populates cache
         let result1 = enforcer.check(&org_id, &agent_id, "api_calls", 1).unwrap();
-        assert!(matches!(result1.source, CheckSource::Redis | CheckSource::LocalCache));
+        assert!(matches!(
+            result1.source,
+            CheckSource::Redis | CheckSource::LocalCache
+        ));
 
         // Second check should hit cache
         let result2 = enforcer.check(&org_id, &agent_id, "api_calls", 1).unwrap();

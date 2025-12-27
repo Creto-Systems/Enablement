@@ -20,7 +20,10 @@ pub fn sandbox_execution_event(
     delegation_depth: u8,
 ) -> UsageEvent {
     let mut properties = serde_json::Map::new();
-    properties.insert("sandbox_id".to_string(), serde_json::json!(sandbox_id.to_string()));
+    properties.insert(
+        "sandbox_id".to_string(),
+        serde_json::json!(sandbox_id.to_string()),
+    );
     properties.insert("duration_ms".to_string(), serde_json::json!(duration_ms));
 
     UsageEvent {
@@ -47,7 +50,10 @@ pub fn cpu_usage_event(
     delegation_depth: u8,
 ) -> UsageEvent {
     let mut properties = serde_json::Map::new();
-    properties.insert("sandbox_id".to_string(), serde_json::json!(sandbox_id.to_string()));
+    properties.insert(
+        "sandbox_id".to_string(),
+        serde_json::json!(sandbox_id.to_string()),
+    );
 
     UsageEvent {
         transaction_id: Uuid::now_v7().to_string(),
@@ -94,7 +100,10 @@ mod tests {
 
     #[test]
     fn test_metering_event_codes() {
-        assert_eq!(RuntimeMeteringEvent::SandboxCreated.code(), "sandbox_created");
+        assert_eq!(
+            RuntimeMeteringEvent::SandboxCreated.code(),
+            "sandbox_created"
+        );
         assert_eq!(RuntimeMeteringEvent::CpuTime.code(), "cpu_milliseconds");
     }
 }

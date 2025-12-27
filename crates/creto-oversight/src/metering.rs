@@ -19,7 +19,10 @@ pub fn oversight_request_event(
     delegation_depth: u8,
 ) -> UsageEvent {
     let mut properties = serde_json::Map::new();
-    properties.insert("request_id".to_string(), serde_json::json!(request_id.to_string()));
+    properties.insert(
+        "request_id".to_string(),
+        serde_json::json!(request_id.to_string()),
+    );
 
     UsageEvent {
         transaction_id: Uuid::now_v7().to_string(),
@@ -66,8 +69,14 @@ mod tests {
 
     #[test]
     fn test_metering_event_codes() {
-        assert_eq!(OversightMeteringEvent::RequestCreated.code(), "oversight_request_created");
-        assert_eq!(OversightMeteringEvent::RequestApproved.code(), "oversight_request_approved");
+        assert_eq!(
+            OversightMeteringEvent::RequestCreated.code(),
+            "oversight_request_created"
+        );
+        assert_eq!(
+            OversightMeteringEvent::RequestApproved.code(),
+            "oversight_request_approved"
+        );
     }
 
     #[cfg(feature = "metering")]

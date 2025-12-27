@@ -123,7 +123,10 @@ impl RuntimeService {
         if let Some(provider) = &self.secret_provider {
             for secret in &secrets {
                 // Verify authorization
-                if !provider.authorize(organization_id, agent_id, &secret.source).await? {
+                if !provider
+                    .authorize(organization_id, agent_id, &secret.source)
+                    .await?
+                {
                     return Err(CretoError::NotAuthorized {
                         resource: format!("secret:{}", secret.name),
                         action: "access".to_string(),
@@ -131,7 +134,9 @@ impl RuntimeService {
                 }
 
                 // TODO: Inject secret into sandbox
-                let _value = provider.resolve(organization_id, agent_id, &secret.source).await?;
+                let _value = provider
+                    .resolve(organization_id, agent_id, &secret.source)
+                    .await?;
                 // backend.inject_secret(sandbox_id, &secret.name, value).await?;
             }
         }
@@ -182,7 +187,10 @@ impl RuntimeService {
             "Creating checkpoint for sandbox"
         );
 
-        let checkpoint_id = self.checkpoint_manager.checkpoint(sandbox_id, config).await?;
+        let checkpoint_id = self
+            .checkpoint_manager
+            .checkpoint(sandbox_id, config)
+            .await?;
 
         tracing::info!(
             sandbox_id = %sandbox_id,
@@ -207,7 +215,10 @@ impl RuntimeService {
 
         // TODO: Actually create/retrieve the sandbox instance
         // For now, create a mock sandbox
-        let checkpoint = self.checkpoint_manager.get_checkpoint(checkpoint_id).await?;
+        let checkpoint = self
+            .checkpoint_manager
+            .get_checkpoint(checkpoint_id)
+            .await?;
 
         let mut sandbox = Sandbox::new(
             OrganizationId::new(),
@@ -338,7 +349,10 @@ mod tests {
         service.checkpoint(sandbox_id).await.unwrap();
         service.checkpoint(sandbox_id).await.unwrap();
 
-        let checkpoints = service.list_checkpoints(Some(sandbox_id), None).await.unwrap();
+        let checkpoints = service
+            .list_checkpoints(Some(sandbox_id), None)
+            .await
+            .unwrap();
         assert_eq!(checkpoints.len(), 2);
     }
 

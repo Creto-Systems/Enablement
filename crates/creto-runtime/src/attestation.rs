@@ -482,9 +482,7 @@ mod tests {
             .await
             .expect("Failed to generate attestation");
 
-        let result = provider
-            .verify_with_policy(&sgx_attestation, &policy)
-            .await;
+        let result = provider.verify_with_policy(&sgx_attestation, &policy).await;
         assert!(result.is_ok(), "SGX should be allowed");
 
         // GVisor should be rejected
@@ -631,7 +629,9 @@ mod tests {
         );
 
         assert!(attestation.is_valid());
-        let remaining = attestation.time_remaining().expect("Should have time remaining");
+        let remaining = attestation
+            .time_remaining()
+            .expect("Should have time remaining");
         assert!(remaining.num_seconds() > 3500); // ~1 hour minus a bit
         assert!(remaining.num_seconds() <= 3600);
     }

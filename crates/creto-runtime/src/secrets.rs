@@ -219,7 +219,10 @@ impl SecretProvider for ChainedSecretProvider {
     ) -> CretoResult<bool> {
         // All providers must authorize
         for provider in &self.providers {
-            if !provider.authorize(organization_id, agent_id, source).await? {
+            if !provider
+                .authorize(organization_id, agent_id, source)
+                .await?
+            {
                 return Ok(false);
             }
         }
@@ -267,13 +270,12 @@ impl SecretProvider for MockSecretProvider {
             SecretSource::Inline { value } => return Ok(SecretValue::text(value)),
         };
 
-        self.secrets
-            .get(&key)
-            .cloned()
-            .ok_or_else(|| creto_common::CretoError::SecretResolutionFailed {
+        self.secrets.get(&key).cloned().ok_or_else(|| {
+            creto_common::CretoError::SecretResolutionFailed {
                 secret_name: key,
                 source: None,
-            })
+            }
+        })
     }
 
     async fn authorize(
@@ -301,7 +303,10 @@ mod tests {
         );
 
         assert_eq!(mount.name, "API_KEY");
-        assert!(matches!(mount.mount_type, SecretMountType::EnvironmentVariable));
+        assert!(matches!(
+            mount.mount_type,
+            SecretMountType::EnvironmentVariable
+        ));
     }
 
     #[test]

@@ -89,12 +89,7 @@ impl OversightService {
                 reason,
                 suggested_reviewers,
             } => {
-                let request = OversightRequest::new(
-                    organization_id,
-                    agent_id,
-                    action,
-                    description,
-                );
+                let request = OversightRequest::new(organization_id, agent_id, action, description);
 
                 // TODO: Look up actual user IDs from suggested_reviewers roles
                 let _ = suggested_reviewers;
@@ -155,10 +150,7 @@ impl OversightService {
             "policy_context".to_string(),
             serde_json::to_value(&context).unwrap_or(serde_json::Value::Null),
         );
-        metadata.insert(
-            "auto_triggered".to_string(),
-            serde_json::Value::Bool(true),
-        );
+        metadata.insert("auto_triggered".to_string(), serde_json::Value::Bool(true));
         request.metadata = serde_json::Value::Object(metadata);
 
         // TODO: Auto-assign reviewers based on suggested_reviewers
@@ -246,7 +238,9 @@ impl OversightService {
             QuorumResult::Approved { .. } => {
                 state_machine.transition(
                     RequestStatus::Approved,
-                    Actor::User { user_id: reviewer_id },
+                    Actor::User {
+                        user_id: reviewer_id,
+                    },
                     Some("Quorum reached".to_string()),
                 )?;
                 RequestStatus::Approved
@@ -254,7 +248,9 @@ impl OversightService {
             QuorumResult::Rejected { .. } => {
                 state_machine.transition(
                     RequestStatus::Rejected,
-                    Actor::User { user_id: reviewer_id },
+                    Actor::User {
+                        user_id: reviewer_id,
+                    },
                     Some("Request rejected".to_string()),
                 )?;
                 RequestStatus::Rejected
@@ -262,7 +258,9 @@ impl OversightService {
             QuorumResult::Pending { .. } => {
                 state_machine.transition(
                     RequestStatus::InReview,
-                    Actor::User { user_id: reviewer_id },
+                    Actor::User {
+                        user_id: reviewer_id,
+                    },
                     None,
                 )?;
                 RequestStatus::InReview
@@ -316,7 +314,7 @@ impl OversightService {
 
         let mut checkpoint = Checkpoint::new(
             request.id,
-            state_machine.current(),  // Use state machine's current state
+            state_machine.current(), // Use state machine's current state
             state_machine,
             context,
         );
@@ -393,14 +391,9 @@ pub enum OversightCheckResult {
     /// Action is allowed without oversight.
     Allowed,
     /// Action requires human approval.
-    RequiresApproval {
-        request_id: Uuid,
-        reason: String,
-    },
+    RequiresApproval { request_id: Uuid, reason: String },
     /// Action is denied by policy.
-    Denied {
-        reason: String,
-    },
+    Denied { reason: String },
 }
 
 impl OversightCheckResult {
@@ -482,8 +475,8 @@ mod tests {
     #[tokio::test]
     async fn test_policy_trigger_creates_request() {
         // Configure service with policy trigger
-        let trigger_config = PolicyTriggerConfig::new()
-            .with_condition(TriggerCondition::AmountThreshold {
+        let trigger_config =
+            PolicyTriggerConfig::new().with_condition(TriggerCondition::AmountThreshold {
                 threshold_cents: 1_000_000, // $10,000
                 currency: None,
             });
@@ -498,12 +491,7 @@ mod tests {
 
         let context = PolicyContext::default();
         let request_id = service
-            .check_policy_trigger(
-                OrganizationId::new(),
-                AgentId::new(),
-                action,
-                context,
-            )
+            .check_policy_trigger(OrganizationId::new(), AgentId::new(), action, context)
             .await
             .unwrap();
 
@@ -513,8 +501,8 @@ mod tests {
     #[tokio::test]
     async fn test_policy_trigger_no_match() {
         // Configure service with policy trigger
-        let trigger_config = PolicyTriggerConfig::new()
-            .with_condition(TriggerCondition::AmountThreshold {
+        let trigger_config =
+            PolicyTriggerConfig::new().with_condition(TriggerCondition::AmountThreshold {
                 threshold_cents: 10_000_000, // $100,000
                 currency: None,
             });
@@ -529,12 +517,7 @@ mod tests {
 
         let context = PolicyContext::default();
         let request_id = service
-            .check_policy_trigger(
-                OrganizationId::new(),
-                AgentId::new(),
-                action,
-                context,
-            )
+            .check_policy_trigger(OrganizationId::new(), AgentId::new(), action, context)
             .await
             .unwrap();
 
@@ -553,12 +536,7 @@ mod tests {
 
         let context = PolicyContext::default();
         let request_id = service
-            .check_policy_trigger(
-                OrganizationId::new(),
-                AgentId::new(),
-                action,
-                context,
-            )
+            .check_policy_trigger(OrganizationId::new(), AgentId::new(), action, context)
             .await
             .unwrap();
 

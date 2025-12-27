@@ -158,7 +158,9 @@ impl Default for PolicyContext {
 }
 
 /// Trust level of an agent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TrustLevel {
     /// New or untrusted agent.
@@ -185,7 +187,10 @@ mod tests {
             currency: "USD".to_string(),
         };
 
-        let decision = engine.evaluate(&action, &PolicyContext::default()).await.unwrap();
+        let decision = engine
+            .evaluate(&action, &PolicyContext::default())
+            .await
+            .unwrap();
 
         assert!(decision.requires_oversight());
     }
@@ -199,7 +204,10 @@ mod tests {
             currency: "USD".to_string(),
         };
 
-        let decision = engine.evaluate(&action, &PolicyContext::default()).await.unwrap();
+        let decision = engine
+            .evaluate(&action, &PolicyContext::default())
+            .await
+            .unwrap();
 
         assert!(decision.is_allowed());
     }
@@ -213,7 +221,10 @@ mod tests {
             scope: "pii".to_string(),
         };
 
-        let decision = engine.evaluate(&action, &PolicyContext::default()).await.unwrap();
+        let decision = engine
+            .evaluate(&action, &PolicyContext::default())
+            .await
+            .unwrap();
 
         assert!(decision.requires_oversight());
     }

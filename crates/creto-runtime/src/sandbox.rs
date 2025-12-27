@@ -5,9 +5,9 @@ use creto_common::{AgentId, CretoResult, OrganizationId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::resources::ResourceLimits;
-use crate::network::NetworkPolicy as DetailedNetworkPolicy;
 use crate::attestation::{Attestation, AttestationPolicy};
+use crate::network::NetworkPolicy as DetailedNetworkPolicy;
+use crate::resources::ResourceLimits;
 
 /// Unique identifier for a sandbox instance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -212,11 +212,7 @@ pub struct Sandbox {
 
 impl Sandbox {
     /// Create a new sandbox (in Creating state).
-    pub fn new(
-        organization_id: OrganizationId,
-        agent_id: AgentId,
-        config: SandboxConfig,
-    ) -> Self {
+    pub fn new(organization_id: OrganizationId, agent_id: AgentId, config: SandboxConfig) -> Self {
         Self {
             id: SandboxId::new(),
             organization_id,

@@ -3,11 +3,10 @@
 //! These tests verify the messaging service functionality including
 //! envelope creation, key management, and session handling.
 
-use creto_integration_tests::common::{TestFixture, test_agent_id};
+use creto_integration_tests::common::{test_agent_id, TestFixture};
 use creto_messaging::{
-    Envelope, EncryptedPayload, ContentType,
-    DeliveryReceipt, ReceiptType,
-    IdentityKey, PreKey, KeyBundle, SessionState,
+    ContentType, DeliveryReceipt, EncryptedPayload, Envelope, IdentityKey, KeyBundle, PreKey,
+    ReceiptType, SessionState,
 };
 use uuid::Uuid;
 
@@ -150,12 +149,7 @@ fn test_envelope_serialization() {
         message_number: 1,
     };
 
-    let envelope = Envelope::new(
-        sender,
-        recipient,
-        ratchet_header,
-        vec![1, 2, 3, 4],
-    );
+    let envelope = Envelope::new(sender, recipient, ratchet_header, vec![1, 2, 3, 4]);
 
     // Test serialization roundtrip
     let bytes = envelope.to_bytes().unwrap();
@@ -200,8 +194,8 @@ fn test_envelope_with_reply_to() {
         message_number: 1,
     };
 
-    let envelope = Envelope::new(sender, recipient, ratchet_header, vec![1, 2, 3])
-        .with_reply_to(reply_to_id);
+    let envelope =
+        Envelope::new(sender, recipient, ratchet_header, vec![1, 2, 3]).with_reply_to(reply_to_id);
 
     assert_eq!(envelope.header.reply_to, Some(reply_to_id));
 }

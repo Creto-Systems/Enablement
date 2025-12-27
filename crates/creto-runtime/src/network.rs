@@ -358,9 +358,9 @@ mod tests {
     #[test]
     fn test_require_authz_flow() {
         let mut policy = NetworkPolicy::new_default_deny();
-        policy.add_rule(EgressRule::with_authz(
-            EgressDestination::Domain("*.secure.example.com".to_string()),
-        ));
+        policy.add_rule(EgressRule::with_authz(EgressDestination::Domain(
+            "*.secure.example.com".to_string(),
+        )));
 
         let enforcer = NetworkPolicyEnforcer::new(policy);
 

@@ -205,11 +205,7 @@ impl PolicyEvaluator {
     /// Check if any trigger conditions are met.
     ///
     /// Returns the matched trigger condition and suggested priority.
-    pub fn evaluate(
-        &self,
-        action: &ActionType,
-        context: &PolicyContext,
-    ) -> Option<TriggerMatch> {
+    pub fn evaluate(&self, action: &ActionType, context: &PolicyContext) -> Option<TriggerMatch> {
         for condition in &self.config.conditions {
             if self.check_condition(condition, action, context) {
                 return Some(TriggerMatch {
@@ -373,7 +369,9 @@ impl PolicyEvaluator {
         _context: &PolicyContext,
     ) -> Priority {
         match condition {
-            TriggerCondition::AmountThreshold { threshold_cents, .. } => {
+            TriggerCondition::AmountThreshold {
+                threshold_cents, ..
+            } => {
                 // Higher amounts = higher priority
                 if let ActionType::Transaction { amount_cents, .. } = action {
                     if *amount_cents > 10_000_000 {
@@ -415,7 +413,9 @@ impl PolicyEvaluator {
     /// Suggest reviewers based on trigger condition and action.
     fn suggest_reviewers(&self, condition: &TriggerCondition, action: &ActionType) -> Vec<String> {
         match condition {
-            TriggerCondition::AmountThreshold { threshold_cents, .. } => {
+            TriggerCondition::AmountThreshold {
+                threshold_cents, ..
+            } => {
                 if let ActionType::Transaction { amount_cents, .. } = action {
                     if *amount_cents > 10_000_000 {
                         vec!["cfo".to_string(), "finance_director".to_string()]
@@ -561,14 +561,18 @@ mod tests {
             amount_cents: 5_000_000,
             currency: "USD".to_string(),
         };
-        assert!(evaluator.evaluate(&action_usd, &PolicyContext::default()).is_some());
+        assert!(evaluator
+            .evaluate(&action_usd, &PolicyContext::default())
+            .is_some());
 
         // EUR should not trigger
         let action_eur = ActionType::Transaction {
             amount_cents: 5_000_000,
             currency: "EUR".to_string(),
         };
-        assert!(evaluator.evaluate(&action_eur, &PolicyContext::default()).is_none());
+        assert!(evaluator
+            .evaluate(&action_eur, &PolicyContext::default())
+            .is_none());
     }
 
     #[test]
@@ -628,7 +632,9 @@ mod tests {
 
         assert!(result.is_some());
         let trigger = result.unwrap();
-        assert!(trigger.suggested_reviewers.contains(&"security_team".to_string()));
+        assert!(trigger
+            .suggested_reviewers
+            .contains(&"security_team".to_string()));
     }
 
     #[test]
@@ -679,9 +685,8 @@ mod tests {
 
     #[test]
     fn test_delegation_depth_trigger() {
-        let config = PolicyTriggerConfig::new().with_condition(TriggerCondition::DelegationDepth {
-            max_depth: 2,
-        });
+        let config = PolicyTriggerConfig::new()
+            .with_condition(TriggerCondition::DelegationDepth { max_depth: 2 });
 
         let evaluator = PolicyEvaluator::new(config);
 
@@ -743,14 +748,18 @@ mod tests {
             amount_cents: 5_000_000,
             currency: "USD".to_string(),
         };
-        assert!(evaluator.evaluate(&action_txn, &PolicyContext::default()).is_some());
+        assert!(evaluator
+            .evaluate(&action_txn, &PolicyContext::default())
+            .is_some());
 
         // Should trigger on second condition
         let action_data = ActionType::DataAccess {
             data_type: "customer".to_string(),
             scope: "pii".to_string(),
         };
-        assert!(evaluator.evaluate(&action_data, &PolicyContext::default()).is_some());
+        assert!(evaluator
+            .evaluate(&action_data, &PolicyContext::default())
+            .is_some());
     }
 
     #[tokio::test]
@@ -760,7 +769,9 @@ mod tests {
             amount_cents: 5_000_000,
             currency: "USD".to_string(),
         };
-        let decision = client.is_authorized(&action, &PolicyContext::default()).await;
+        let decision = client
+            .is_authorized(&action, &PolicyContext::default())
+            .await;
 
         assert!(decision.requires_oversight());
     }
@@ -772,7 +783,9 @@ mod tests {
             amount_cents: 100,
             currency: "USD".to_string(),
         };
-        let decision = client.is_authorized(&action, &PolicyContext::default()).await;
+        let decision = client
+            .is_authorized(&action, &PolicyContext::default())
+            .await;
 
         assert!(decision.is_allowed());
     }
@@ -784,7 +797,9 @@ mod tests {
             amount_cents: 5_000_000,
             currency: "USD".to_string(),
         };
-        let decision = client.is_authorized(&action, &PolicyContext::default()).await;
+        let decision = client
+            .is_authorized(&action, &PolicyContext::default())
+            .await;
 
         assert!(decision.is_denied());
     }

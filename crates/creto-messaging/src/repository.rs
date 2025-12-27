@@ -10,8 +10,8 @@ use creto_common::{AgentId, CretoError, OrganizationId};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use crate::session::SessionState;
 use crate::channel::ChannelType;
+use crate::session::SessionState;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enum Serialization Helpers
@@ -192,7 +192,12 @@ impl KeyBundleRepository for PgKeyBundleRepository {
 #[async_trait::async_trait]
 pub trait PreKeyRepository: Send + Sync {
     /// Store a prekey.
-    async fn store(&self, agent_id: AgentId, prekey_id: i32, public_key: &[u8]) -> Result<(), CretoError>;
+    async fn store(
+        &self,
+        agent_id: AgentId,
+        prekey_id: i32,
+        public_key: &[u8],
+    ) -> Result<(), CretoError>;
 
     /// Consume a prekey (mark as used and return it).
     async fn consume(&self, agent_id: AgentId) -> Result<Option<(i32, Vec<u8>)>, CretoError>;
@@ -214,7 +219,12 @@ impl PgPreKeyRepository {
 
 #[async_trait::async_trait]
 impl PreKeyRepository for PgPreKeyRepository {
-    async fn store(&self, agent_id: AgentId, prekey_id: i32, public_key: &[u8]) -> Result<(), CretoError> {
+    async fn store(
+        &self,
+        agent_id: AgentId,
+        prekey_id: i32,
+        public_key: &[u8],
+    ) -> Result<(), CretoError> {
         sqlx::query(
             r#"
             INSERT INTO prekeys (agent_id, prekey_id, public_key)
@@ -252,7 +262,12 @@ impl PreKeyRepository for PgPreKeyRepository {
         .await
         .map_err(|e| CretoError::Database(e.to_string()))?;
 
-        Ok(row.map(|r| (r.get::<i32, _>("prekey_id"), r.get::<Vec<u8>, _>("public_key"))))
+        Ok(row.map(|r| {
+            (
+                r.get::<i32, _>("prekey_id"),
+                r.get::<Vec<u8>, _>("public_key"),
+            )
+        }))
     }
 
     async fn count_available(&self, agent_id: AgentId) -> Result<i64, CretoError> {
@@ -291,10 +306,18 @@ pub struct SessionRecord {
 #[async_trait::async_trait]
 pub trait SessionRepository: Send + Sync {
     /// Create or update a session.
-    async fn upsert(&self, local_agent_id: AgentId, remote_agent_id: AgentId) -> Result<Uuid, CretoError>;
+    async fn upsert(
+        &self,
+        local_agent_id: AgentId,
+        remote_agent_id: AgentId,
+    ) -> Result<Uuid, CretoError>;
 
     /// Get session by local and remote agent IDs.
-    async fn get(&self, local_agent_id: AgentId, remote_agent_id: AgentId) -> Result<Option<SessionRecord>, CretoError>;
+    async fn get(
+        &self,
+        local_agent_id: AgentId,
+        remote_agent_id: AgentId,
+    ) -> Result<Option<SessionRecord>, CretoError>;
 
     /// Update session state.
     async fn update_state(&self, id: Uuid, state: SessionState) -> Result<(), CretoError>;
@@ -316,7 +339,11 @@ impl PgSessionRepository {
 
 #[async_trait::async_trait]
 impl SessionRepository for PgSessionRepository {
-    async fn upsert(&self, local_agent_id: AgentId, remote_agent_id: AgentId) -> Result<Uuid, CretoError> {
+    async fn upsert(
+        &self,
+        local_agent_id: AgentId,
+        remote_agent_id: AgentId,
+    ) -> Result<Uuid, CretoError> {
         let row = sqlx::query(
             r#"
             INSERT INTO messaging_sessions (local_agent_id, remote_agent_id, state)
@@ -335,7 +362,11 @@ impl SessionRepository for PgSessionRepository {
         Ok(row.get("id"))
     }
 
-    async fn get(&self, local_agent_id: AgentId, remote_agent_id: AgentId) -> Result<Option<SessionRecord>, CretoError> {
+    async fn get(
+        &self,
+        local_agent_id: AgentId,
+        remote_agent_id: AgentId,
+    ) -> Result<Option<SessionRecord>, CretoError> {
         let row = sqlx::query(
             r#"
             SELECT id, state, created_at, last_active_at
@@ -434,7 +465,11 @@ pub trait EnvelopeRepository: Send + Sync {
     ) -> Result<Uuid, CretoError>;
 
     /// Get undelivered envelopes for a recipient.
-    async fn get_undelivered(&self, recipient_id: AgentId, limit: i64) -> Result<Vec<EnvelopeRecord>, CretoError>;
+    async fn get_undelivered(
+        &self,
+        recipient_id: AgentId,
+        limit: i64,
+    ) -> Result<Vec<EnvelopeRecord>, CretoError>;
 
     /// Mark envelope as delivered.
     async fn mark_delivered(&self, id: Uuid) -> Result<(), CretoError>;
@@ -486,7 +521,11 @@ impl EnvelopeRepository for PgEnvelopeRepository {
         Ok(row.get("id"))
     }
 
-    async fn get_undelivered(&self, recipient_id: AgentId, limit: i64) -> Result<Vec<EnvelopeRecord>, CretoError> {
+    async fn get_undelivered(
+        &self,
+        recipient_id: AgentId,
+        limit: i64,
+    ) -> Result<Vec<EnvelopeRecord>, CretoError> {
         let rows = sqlx::query(
             r#"
             SELECT id, sender_id, ciphertext, delivered, created_at
@@ -665,7 +704,10 @@ mod tests {
 
     #[test]
     fn test_session_state_roundtrip() {
-        assert_eq!(SessionState::parse_db_str("establishing"), SessionState::Establishing);
+        assert_eq!(
+            SessionState::parse_db_str("establishing"),
+            SessionState::Establishing
+        );
         assert_eq!(SessionState::Establishing.as_str(), "establishing");
     }
 

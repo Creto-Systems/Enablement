@@ -26,31 +26,31 @@
 //! let encrypted = session.encrypt(b"Hello, agent!").await?;
 //! ```
 
-pub mod keys;
-pub mod x3dh;
-pub mod ratchet;
-pub mod envelope;
-pub mod repository;
-pub mod session;
 pub mod channel;
+pub mod envelope;
+pub mod keys;
+pub mod ratchet;
+pub mod repository;
 pub mod service;
+pub mod session;
 pub mod topic;
+pub mod x3dh;
 
-pub use keys::{KeyBundle, IdentityKey, PreKey, SignedPreKey};
-pub use x3dh::{X3DHParams, X3DHResult};
+pub use channel::{Channel, ChannelConfig, ChannelType};
+pub use envelope::{
+    ContentType, DeliveryReceipt, EncryptedPayload, Envelope, EnvelopeHeader, ReceiptType,
+};
+pub use keys::{IdentityKey, KeyBundle, PreKey, SignedPreKey};
 pub use ratchet::{DoubleRatchet, RatchetState};
-pub use envelope::{Envelope, EnvelopeHeader, EncryptedPayload, ContentType, DeliveryReceipt, ReceiptType};
 pub use repository::{
-    KeyBundleRepository, PgKeyBundleRepository,
-    PreKeyRepository, PgPreKeyRepository,
-    SessionRepository, PgSessionRepository,
-    EnvelopeRepository, PgEnvelopeRepository,
-    ChannelRepository, PgChannelRepository,
+    ChannelRepository, EnvelopeRepository, KeyBundleRepository, PgChannelRepository,
+    PgEnvelopeRepository, PgKeyBundleRepository, PgPreKeyRepository, PgSessionRepository,
+    PreKeyRepository, SessionRepository,
 };
-pub use session::{Session, SessionState};
-pub use channel::{Channel, ChannelType, ChannelConfig};
 pub use service::MessagingService;
+pub use session::{Session, SessionState};
 pub use topic::{
-    Topic, TopicId, TopicPolicy, TopicConfig, TopicManager,
-    Subscription, SubscriptionId, SubscriptionFilter,
+    Subscription, SubscriptionFilter, SubscriptionId, Topic, TopicConfig, TopicId, TopicManager,
+    TopicPolicy,
 };
+pub use x3dh::{X3DHParams, X3DHResult};

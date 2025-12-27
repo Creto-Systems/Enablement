@@ -3,9 +3,9 @@
 //! These tests verify the metering service functionality including
 //! event ingestion, quota enforcement, and usage tracking.
 
-use creto_integration_tests::common::TestFixture;
-use creto_metering::{UsageEvent, UsageEventType, QuotaPeriod, Quota, QuotaEnforcer};
 use creto_common::OrganizationId;
+use creto_integration_tests::common::TestFixture;
+use creto_metering::{Quota, QuotaEnforcer, QuotaPeriod, UsageEvent, UsageEventType};
 
 #[test]
 fn test_usage_event_builder() {
@@ -28,8 +28,14 @@ fn test_usage_event_type_codes() {
     assert_eq!(UsageEventType::ApiCall.default_code(), "api_calls");
     assert_eq!(UsageEventType::InputTokens.default_code(), "input_tokens");
     assert_eq!(UsageEventType::OutputTokens.default_code(), "output_tokens");
-    assert_eq!(UsageEventType::SandboxExecution.default_code(), "sandbox_executions");
-    assert_eq!(UsageEventType::OversightRequest.default_code(), "oversight_requests");
+    assert_eq!(
+        UsageEventType::SandboxExecution.default_code(),
+        "sandbox_executions"
+    );
+    assert_eq!(
+        UsageEventType::OversightRequest.default_code(),
+        "oversight_requests"
+    );
     assert_eq!(UsageEventType::MessageSent.default_code(), "messages_sent");
 }
 
@@ -211,12 +217,7 @@ fn test_quota_enforcer_check_allows() {
     let fixture = TestFixture::new();
 
     // Default implementation allows all (no quota registered = fast_allow)
-    let result = enforcer.check(
-        &fixture.org_id,
-        &fixture.agent_id,
-        "api_calls",
-        10,
-    );
+    let result = enforcer.check(&fixture.org_id, &fixture.agent_id, "api_calls", 10);
 
     assert!(result.is_ok());
     assert!(result.unwrap().allowed);
@@ -232,12 +233,7 @@ fn test_quota_enforcer_register_and_check() {
     enforcer.register_quota(&quota);
 
     // Check should succeed within limit
-    let result = enforcer.check(
-        &fixture.org_id,
-        &fixture.agent_id,
-        "api_calls",
-        50,
-    );
+    let result = enforcer.check(&fixture.org_id, &fixture.agent_id, "api_calls", 50);
 
     assert!(result.is_ok());
     let check = result.unwrap();

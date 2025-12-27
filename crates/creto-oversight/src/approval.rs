@@ -38,11 +38,7 @@ fn default_weight() -> u32 {
 
 impl Approval {
     /// Create a new approval decision.
-    pub fn new(
-        request_id: Uuid,
-        reviewer_id: UserId,
-        decision: ApprovalDecision,
-    ) -> Self {
+    pub fn new(request_id: Uuid, reviewer_id: UserId, decision: ApprovalDecision) -> Self {
         Self {
             id: Uuid::now_v7(),
             request_id,

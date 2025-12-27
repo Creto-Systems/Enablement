@@ -6,20 +6,15 @@
 use creto_common::{AgentId, OrganizationId};
 use creto_integration_tests::common::TestFixture;
 use creto_runtime::{
-    Sandbox, SandboxConfig, SandboxState, SandboxId,
-    ExecutionRequest, ExecutionStatus, ExecutionTiming, ExecutionResult, ExecutionError,
-    ResourceLimits, ResourceUsage,
-    PoolConfig, WarmPool,
+    ExecutionError, ExecutionRequest, ExecutionResult, ExecutionStatus, ExecutionTiming,
+    PoolConfig, ResourceLimits, ResourceUsage, Sandbox, SandboxConfig, SandboxId, SandboxState,
+    WarmPool,
 };
 
 #[test]
 fn test_sandbox_creation() {
     let fixture = TestFixture::new();
-    let sandbox = Sandbox::new(
-        fixture.org_id,
-        fixture.agent_id,
-        SandboxConfig::default(),
-    );
+    let sandbox = Sandbox::new(fixture.org_id, fixture.agent_id, SandboxConfig::default());
 
     assert_eq!(sandbox.state, SandboxState::Creating);
     assert!(sandbox.runtime_handle.is_none());
@@ -28,11 +23,7 @@ fn test_sandbox_creation() {
 #[test]
 fn test_sandbox_state_transitions() {
     let fixture = TestFixture::new();
-    let mut sandbox = Sandbox::new(
-        fixture.org_id,
-        fixture.agent_id,
-        SandboxConfig::default(),
-    );
+    let mut sandbox = Sandbox::new(fixture.org_id, fixture.agent_id, SandboxConfig::default());
 
     sandbox.mark_ready("handle_123".to_string());
     assert_eq!(sandbox.state, SandboxState::Ready);
@@ -110,11 +101,8 @@ fn test_execution_error_helpers() {
 fn test_execution_result_success() {
     let request_id = uuid::Uuid::now_v7();
     let timing = ExecutionTiming::new();
-    let result = ExecutionResult::success(
-        request_id,
-        serde_json::json!({"output": "hello"}),
-        timing,
-    );
+    let result =
+        ExecutionResult::success(request_id, serde_json::json!({"output": "hello"}), timing);
 
     assert!(result.is_success());
     assert_eq!(result.status, ExecutionStatus::Completed);

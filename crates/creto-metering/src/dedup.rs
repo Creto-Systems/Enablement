@@ -124,7 +124,10 @@ impl Deduplicator {
             match self.redis_check_and_mark(redis.clone(), &key).await {
                 Ok(result) => return Ok(result),
                 Err(e) => {
-                    warn!("Redis dedup check failed: {}, falling back to local cache", e);
+                    warn!(
+                        "Redis dedup check failed: {}, falling back to local cache",
+                        e
+                    );
                     if !self.config.use_local_fallback {
                         return Err(e);
                     }
@@ -147,7 +150,10 @@ impl Deduplicator {
             match self.redis_batch_check(redis.clone(), transaction_ids).await {
                 Ok(results) => return Ok(results),
                 Err(e) => {
-                    warn!("Redis batch dedup check failed: {}, falling back to local", e);
+                    warn!(
+                        "Redis batch dedup check failed: {}, falling back to local",
+                        e
+                    );
                     if !self.config.use_local_fallback {
                         return Err(e);
                     }
@@ -367,9 +373,9 @@ mod tests {
         let ids = vec!["batch_1", "batch_2", "batch_3"];
         let results = dedup.check_and_mark_batch(&ids).await.unwrap();
 
-        assert!(results[0].is_new());     // batch_1 is new
+        assert!(results[0].is_new()); // batch_1 is new
         assert!(results[1].is_duplicate()); // batch_2 was already inserted
-        assert!(results[2].is_new());     // batch_3 is new
+        assert!(results[2].is_new()); // batch_3 is new
     }
 
     #[tokio::test]

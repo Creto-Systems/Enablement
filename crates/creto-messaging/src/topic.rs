@@ -176,9 +176,9 @@ impl SubscriptionFilter {
         }
 
         // All filter criteria must match
-        self.metadata.iter().all(|(k, v)| {
-            message_metadata.get(k).map(|mv| mv == v).unwrap_or(false)
-        })
+        self.metadata
+            .iter()
+            .all(|(k, v)| message_metadata.get(k).map(|mv| mv == v).unwrap_or(false))
     }
 }
 
@@ -349,9 +349,10 @@ impl TopicManager {
 
     /// Delete a topic.
     pub fn delete_topic(&mut self, topic_id: TopicId, agent_id: AgentId) -> CretoResult<()> {
-        let topic = self.topics.get(&topic_id).ok_or_else(|| {
-            CretoError::NotFound(format!("Topic {} not found", topic_id))
-        })?;
+        let topic = self
+            .topics
+            .get(&topic_id)
+            .ok_or_else(|| CretoError::NotFound(format!("Topic {} not found", topic_id)))?;
 
         // Only owner can delete
         if topic.owner_agent_id != agent_id {
@@ -385,9 +386,10 @@ impl TopicManager {
         subscriber_agent_id: AgentId,
         filter: Option<SubscriptionFilter>,
     ) -> CretoResult<Subscription> {
-        let topic = self.topics.get(&topic_id).ok_or_else(|| {
-            CretoError::NotFound(format!("Topic {} not found", topic_id))
-        })?;
+        let topic = self
+            .topics
+            .get(&topic_id)
+            .ok_or_else(|| CretoError::NotFound(format!("Topic {} not found", topic_id)))?;
 
         // Check subscription permission
         if !topic.can_subscribe(subscriber_agent_id) {
@@ -398,15 +400,17 @@ impl TopicManager {
 
         // Check max subscribers
         if let Some(max) = topic.max_subscribers {
-            let current_count = self.topic_subscriptions
+            let current_count = self
+                .topic_subscriptions
                 .get(&topic_id)
                 .map(|s| s.len())
                 .unwrap_or(0);
 
             if current_count >= max as usize {
-                return Err(CretoError::LimitExceeded(
-                    format!("Topic has reached maximum of {} subscribers", max),
-                ));
+                return Err(CretoError::LimitExceeded(format!(
+                    "Topic has reached maximum of {} subscribers",
+                    max
+                )));
             }
         }
 
@@ -477,9 +481,10 @@ impl TopicManager {
         payload: &[u8],
         metadata: HashMap<String, String>,
     ) -> CretoResult<Vec<AgentId>> {
-        let topic = self.topics.get(&topic_id).ok_or_else(|| {
-            CretoError::NotFound(format!("Topic {} not found", topic_id))
-        })?;
+        let topic = self
+            .topics
+            .get(&topic_id)
+            .ok_or_else(|| CretoError::NotFound(format!("Topic {} not found", topic_id)))?;
 
         // Check publish permission
         if !topic.can_publish(publisher_id) {
@@ -519,7 +524,8 @@ impl TopicManager {
         }
 
         // Get matching subscribers
-        let subscriber_ids: Vec<AgentId> = self.topic_subscriptions
+        let subscriber_ids: Vec<AgentId> = self
+            .topic_subscriptions
             .get(&topic_id)
             .map(|subs| {
                 subs.iter()
@@ -555,7 +561,8 @@ impl TopicManager {
             )));
         }
 
-        let subscriptions = self.topic_subscriptions
+        let subscriptions = self
+            .topic_subscriptions
             .get(&topic_id)
             .map(|subs| {
                 subs.iter()
@@ -709,8 +716,8 @@ mod tests {
         let topic_id = manager.create_topic(config).unwrap();
 
         // Subscribe with filter
-        let filter = SubscriptionFilter::new()
-            .with_metadata("type".to_string(), "alert".to_string());
+        let filter =
+            SubscriptionFilter::new().with_metadata("type".to_string(), "alert".to_string());
         manager.subscribe(topic_id, sub1, Some(filter)).unwrap();
 
         // Subscribe without filter
@@ -728,9 +735,7 @@ mod tests {
 
         // Publish without matching metadata
         let metadata = HashMap::new();
-        let subscribers = manager
-            .publish(topic_id, owner, b"info", metadata)
-            .unwrap();
+        let subscribers = manager.publish(topic_id, owner, b"info", metadata).unwrap();
 
         // Only sub2 (no filter) should receive
         assert_eq!(subscribers.len(), 1);

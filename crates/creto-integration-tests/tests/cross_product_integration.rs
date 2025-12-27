@@ -6,8 +6,8 @@
 //! - Messaging + Runtime: Secure communication within sandboxes
 //! - Full workflow: End-to-end agent action flows
 
-use creto_integration_tests::common::TestFixture;
 use creto_common::{AgentId, OrganizationId, UserId};
+use creto_integration_tests::common::TestFixture;
 
 // ============================================================================
 // Metering + Oversight Integration
@@ -15,7 +15,7 @@ use creto_common::{AgentId, OrganizationId, UserId};
 
 mod metering_oversight {
     use super::*;
-    use creto_metering::{UsageEvent, UsageEventType, Quota, QuotaPeriod, QuotaEnforcer};
+    use creto_metering::{Quota, QuotaEnforcer, QuotaPeriod, UsageEvent, UsageEventType};
     use creto_oversight::{
         policy::{PolicyContext, PolicyEngine, TrustLevel},
         request::{ActionType, OversightRequest, Priority},
@@ -123,14 +123,14 @@ mod metering_oversight {
 
 mod runtime_oversight {
     use super::*;
-    use creto_runtime::{
-        sandbox::{Sandbox, SandboxConfig, NetworkPolicy as SandboxNetworkPolicy},
-        resources::ResourceLimits,
-        attestation::{AttestationPolicy, AttestationPlatform},
-    };
     use creto_oversight::{
-        request::{ActionType, OversightRequest, Priority, RequestStatus},
         policy::{PolicyContext, PolicyEngine, TrustLevel},
+        request::{ActionType, OversightRequest, Priority, RequestStatus},
+    };
+    use creto_runtime::{
+        attestation::{AttestationPlatform, AttestationPolicy},
+        resources::ResourceLimits,
+        sandbox::{NetworkPolicy as SandboxNetworkPolicy, Sandbox, SandboxConfig},
     };
 
     /// Test sandbox creation requiring oversight for high-resource configs
@@ -144,9 +144,9 @@ mod runtime_oversight {
             runtime: "python3.11".to_string(),
             limits: ResourceLimits {
                 memory_bytes: 32 * 1024 * 1024 * 1024, // 32GB
-                cpu_time_ms: 3600000,                   // 1 hour
+                cpu_time_ms: 3600000,                  // 1 hour
                 wall_time_seconds: 7200,
-                disk_bytes: 10 * 1024 * 1024 * 1024,   // 10GB
+                disk_bytes: 10 * 1024 * 1024 * 1024, // 10GB
                 max_processes: 1000,
                 max_open_files: 10000,
                 network_bandwidth_bps: None,
@@ -189,11 +189,7 @@ mod runtime_oversight {
         let fixture = TestFixture::new();
 
         // Create sandbox with strict attestation policy
-        let mut sandbox = Sandbox::new(
-            fixture.org_id,
-            fixture.agent_id,
-            SandboxConfig::default(),
-        );
+        let mut sandbox = Sandbox::new(fixture.org_id, fixture.agent_id, SandboxConfig::default());
 
         // Configure strict attestation
         sandbox.attestation_policy = AttestationPolicy::strict();
@@ -203,7 +199,10 @@ mod runtime_oversight {
 
         // Verify attestation policy requirements
         assert!(sandbox.attestation_policy.require_attestation);
-        assert!(sandbox.attestation_policy.allowed_platforms.contains(&AttestationPlatform::SGX));
+        assert!(sandbox
+            .attestation_policy
+            .allowed_platforms
+            .contains(&AttestationPlatform::SGX));
     }
 
     /// Test sandbox network policy with oversight approval
@@ -234,8 +233,8 @@ mod runtime_oversight {
 
 mod messaging_runtime {
     use super::*;
+    use creto_messaging::topic::{TopicConfig, TopicManager, TopicPolicy};
     use creto_runtime::sandbox::{Sandbox, SandboxConfig};
-    use creto_messaging::topic::{TopicConfig, TopicPolicy, TopicManager};
 
     /// Test secure messaging from within a sandbox
     #[test]
@@ -243,11 +242,7 @@ mod messaging_runtime {
         let fixture = TestFixture::new();
 
         // Create sandbox for agent
-        let _sandbox = Sandbox::new(
-            fixture.org_id,
-            fixture.agent_id,
-            SandboxConfig::default(),
-        );
+        let _sandbox = Sandbox::new(fixture.org_id, fixture.agent_id, SandboxConfig::default());
 
         // Create topic manager
         let mut topic_manager = TopicManager::new();
@@ -272,7 +267,8 @@ mod messaging_runtime {
         let mut topic_manager = TopicManager::new();
 
         // Create a checkpoint notification topic
-        let mut topic_config = TopicConfig::new("checkpoint-notifications".to_string(), fixture.agent_id);
+        let mut topic_config =
+            TopicConfig::new("checkpoint-notifications".to_string(), fixture.agent_id);
         topic_config.publish_policy = TopicPolicy::Private;
         topic_config.subscribe_policy = TopicPolicy::Allowlist;
         topic_config.allowed_agents = vec![fixture.agent_id];
@@ -280,7 +276,9 @@ mod messaging_runtime {
         let topic_id = topic_manager.create_topic(topic_config).unwrap();
 
         // Subscribe to checkpoint notifications
-        let subscription = topic_manager.subscribe(topic_id, fixture.agent_id, None).unwrap();
+        let subscription = topic_manager
+            .subscribe(topic_id, fixture.agent_id, None)
+            .unwrap();
         assert_eq!(subscription.topic_id, topic_id);
 
         // Publish checkpoint event
@@ -289,12 +287,14 @@ mod messaging_runtime {
             ("checkpoint_id".to_string(), "cp-456".to_string()),
         ]);
 
-        let delivered = topic_manager.publish(
-            topic_id,
-            fixture.agent_id,
-            b"checkpoint_complete",
-            checkpoint_metadata,
-        ).unwrap();
+        let delivered = topic_manager
+            .publish(
+                topic_id,
+                fixture.agent_id,
+                b"checkpoint_complete",
+                checkpoint_metadata,
+            )
+            .unwrap();
 
         // Should be delivered to subscriber
         assert!(delivered.contains(&fixture.agent_id));
@@ -307,7 +307,8 @@ mod messaging_runtime {
 
 mod full_workflow {
     use super::*;
-    use creto_metering::{UsageEvent, UsageEventType, Quota, QuotaPeriod, QuotaEnforcer};
+    use creto_messaging::service::MessagingService;
+    use creto_metering::{Quota, QuotaEnforcer, QuotaPeriod, UsageEvent, UsageEventType};
     use creto_oversight::{
         approval::{Approval, ApprovalDecision},
         policy::{PolicyContext, PolicyEngine, TrustLevel},
@@ -315,7 +316,6 @@ mod full_workflow {
         service::OversightService,
     };
     use creto_runtime::sandbox::{Sandbox, SandboxConfig};
-    use creto_messaging::service::MessagingService;
 
     /// Test complete agent action flow:
     /// 1. Agent requests action
@@ -340,12 +340,7 @@ mod full_workflow {
         let quota = Quota::new(fixture.org_id, "transactions", 100, QuotaPeriod::Daily);
         enforcer.register_quota(&quota);
 
-        let quota_check = enforcer.check(
-            &fixture.org_id,
-            &fixture.agent_id,
-            "transactions",
-            1,
-        );
+        let quota_check = enforcer.check(&fixture.org_id, &fixture.agent_id, "transactions", 1);
         assert!(quota_check.is_ok());
         assert!(quota_check.unwrap().allowed);
 
@@ -388,11 +383,7 @@ mod full_workflow {
         assert_eq!(approval_result.request_id, request_id);
 
         // Step 6: Execute in sandbox (after approval)
-        let _sandbox = Sandbox::new(
-            fixture.org_id,
-            fixture.agent_id,
-            SandboxConfig::default(),
-        );
+        let _sandbox = Sandbox::new(fixture.org_id, fixture.agent_id, SandboxConfig::default());
 
         // Step 7: Record metering event for completed action
         let event = UsageEvent::builder()
@@ -499,10 +490,10 @@ mod full_workflow {
 
 mod error_handling {
     use super::*;
-    use creto_metering::{Quota, QuotaPeriod, QuotaEnforcer};
+    use creto_metering::{Quota, QuotaEnforcer, QuotaPeriod};
     use creto_oversight::{
-        request::{ActionType, OversightRequest, RequestStatus},
         approval::ApprovalDecision,
+        request::{ActionType, OversightRequest, RequestStatus},
         service::OversightService,
     };
 
@@ -518,12 +509,7 @@ mod error_handling {
         enforcer.register_quota(&quota);
 
         // Check should indicate quota exceeded
-        let result = enforcer.check(
-            &fixture.org_id,
-            &fixture.agent_id,
-            "api_calls",
-            1,
-        );
+        let result = enforcer.check(&fixture.org_id, &fixture.agent_id, "api_calls", 1);
 
         assert!(result.is_ok());
         let check = result.unwrap();

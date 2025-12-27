@@ -40,9 +40,7 @@ mod reservation;
 mod types;
 
 pub use bloom::{BloomConfig, QuotaBloomFilter, QuotaKey};
-pub use enforcer::{
-    CheckSource, EnforcerConfig, EnforcerError, QuotaCheckResult, QuotaEnforcer,
-};
+pub use enforcer::{CheckSource, EnforcerConfig, EnforcerError, QuotaCheckResult, QuotaEnforcer};
 pub use reservation::{
     Reservation, ReservationError, ReservationStatus, ReservationStore, ReserveRequest,
 };

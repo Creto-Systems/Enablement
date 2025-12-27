@@ -122,8 +122,7 @@ impl Timestamp {
 
     /// Convert to chrono DateTime.
     pub fn to_datetime(&self) -> chrono::DateTime<chrono::Utc> {
-        chrono::DateTime::from_timestamp_millis(self.0)
-            .unwrap_or_else(chrono::Utc::now)
+        chrono::DateTime::from_timestamp_millis(self.0).unwrap_or_else(chrono::Utc::now)
     }
 
     /// Check if this timestamp is before another.

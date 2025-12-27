@@ -65,24 +65,25 @@ pub mod repository;
 pub mod service;
 pub mod validation;
 
+pub use aggregation::{Aggregation, AggregationEngine, AggregationType, AggregationValue};
+pub use credits::{
+    CreditApplication, CreditManager, CreditTransaction, CreditTransactionType, Wallet,
+};
 pub use dedup::{DedupConfig, DedupResult, Deduplicator};
 pub use events::{UsageEvent, UsageEventType};
 pub use grpc::{MeteringGrpcService, MeteringServiceConfig};
+pub use invoice::{
+    Discount, DiscountType, Invoice, InvoiceGenerator, InvoiceStatus, LineItem, UsageAggregation,
+};
+pub use pricing::{PricingEngine, PricingModel, PricingStrategy, PricingTier};
 pub use quota::{
     BloomConfig, CheckSource, EnforcerConfig, EnforcerError, Quota, QuotaBloomFilter,
     QuotaCheckResult, QuotaEnforcer, QuotaKey, QuotaPeriod, QuotaStatus, Reservation,
     ReservationError, ReservationStatus, ReservationStore, ReserveRequest,
 };
 pub use repository::{
-    EventRepository, PgEventRepository,
-    QuotaRepository, PgQuotaRepository,
-    InvoiceRepository, PgInvoiceRepository, InvoiceRecord,
+    EventRepository, InvoiceRecord, InvoiceRepository, PgEventRepository, PgInvoiceRepository,
+    PgQuotaRepository, QuotaRepository,
 };
 pub use service::MeteringService;
 pub use validation::{BatchValidationResult, EventValidator, ValidationConfig, ValidationError};
-pub use credits::{
-    CreditApplication, CreditManager, CreditTransaction, CreditTransactionType, Wallet,
-};
-pub use invoice::{Discount, DiscountType, Invoice, InvoiceGenerator, InvoiceStatus, LineItem, UsageAggregation};
-pub use pricing::{PricingEngine, PricingModel, PricingStrategy, PricingTier};
-pub use aggregation::{Aggregation, AggregationEngine, AggregationType, AggregationValue};

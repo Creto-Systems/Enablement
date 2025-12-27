@@ -2,13 +2,12 @@
 //!
 //! Verifies the <1ms p99 latency target for policy evaluation and state transitions.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use creto_common::{AgentId, OrganizationId, UserId};
 use creto_oversight::{
-    ActionType, Approval, ApprovalDecision, PolicyContext, PolicyDecision,
-    QuorumCalculator, QuorumConfig, RequestStatus, StateMachine, TrustLevel,
-    policy::PolicyEngine, state::Actor,
+    policy::PolicyEngine, state::Actor, ActionType, Approval, ApprovalDecision, PolicyContext,
+    PolicyDecision, QuorumCalculator, QuorumConfig, RequestStatus, StateMachine, TrustLevel,
 };
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -110,11 +109,7 @@ fn bench_state_machine(c: &mut Criterion) {
                 let mut sm = StateMachine::new();
 
                 // Pending -> InReview
-                let _ = sm.transition(
-                    RequestStatus::InReview,
-                    Actor::User { user_id },
-                    None,
-                );
+                let _ = sm.transition(RequestStatus::InReview, Actor::User { user_id }, None);
 
                 // InReview -> Approved
                 let _ = sm.transition(
@@ -203,11 +198,7 @@ fn bench_policy_latency(c: &mut Criterion) {
     let context = PolicyContext::default();
 
     group.bench_function("single_evaluation_latency", |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                black_box(engine.evaluate(&action, &context).await)
-            })
-        });
+        b.iter(|| rt.block_on(async { black_box(engine.evaluate(&action, &context).await) }));
     });
 
     group.finish();

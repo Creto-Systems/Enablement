@@ -173,10 +173,7 @@ impl CheckpointManager {
     }
 
     /// Delete old checkpoints (retention policy).
-    pub async fn prune_old_checkpoints(
-        &self,
-        before: DateTime<Utc>,
-    ) -> CretoResult<usize> {
+    pub async fn prune_old_checkpoints(&self, before: DateTime<Utc>) -> CretoResult<usize> {
         self.repository.delete_before(before).await
     }
 }
@@ -225,12 +222,8 @@ mod tests {
             "conversation": ["User asked for approval", "System acknowledged"]
         });
 
-        let checkpoint = Checkpoint::new(
-            request_id,
-            RequestStatus::InReview,
-            &machine,
-            context,
-        ).with_reason("periodic");
+        let checkpoint = Checkpoint::new(request_id, RequestStatus::InReview, &machine, context)
+            .with_reason("periodic");
 
         assert_eq!(checkpoint.request_id, request_id);
         assert_eq!(checkpoint.status, RequestStatus::InReview);

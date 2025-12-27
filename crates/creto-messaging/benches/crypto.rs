@@ -2,13 +2,13 @@
 //!
 //! Verifies the >100K msg/s target for encryption and key operations.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use creto_common::AgentId;
 use creto_messaging::{
-    DoubleRatchet, KeyBundle, Session,
     topic::{TopicConfig, TopicManager},
     x3dh::X3DH,
+    DoubleRatchet, KeyBundle, Session,
 };
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use std::time::Duration;
 
 /// Benchmark: Key Bundle Generation
@@ -192,7 +192,12 @@ fn bench_topics(c: &mut Criterion) {
     group.bench_function("publish_to_10_subscribers_100", |b| {
         b.iter(|| {
             for _ in 0..100 {
-                let result = black_box(pub_manager.publish(pub_topic_id, owner_id, message, metadata.clone()));
+                let result = black_box(pub_manager.publish(
+                    pub_topic_id,
+                    owner_id,
+                    message,
+                    metadata.clone(),
+                ));
                 black_box(result);
             }
         });

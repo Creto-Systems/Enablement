@@ -3,13 +3,12 @@
 //! These tests verify the oversight service functionality including
 //! approval workflows, state transitions, and quorum management.
 
+use chrono::Utc;
 use creto_integration_tests::common::TestFixture;
 use creto_oversight::{
-    OversightRequest, RequestStatus, ActionType, Priority,
-    Approval, ApprovalDecision, QuorumConfig, QuorumCalculator, QuorumResult,
-    StateMachine, StateTransition,
+    ActionType, Approval, ApprovalDecision, OversightRequest, Priority, QuorumCalculator,
+    QuorumConfig, QuorumResult, RequestStatus, StateMachine, StateTransition,
 };
-use chrono::Utc;
 use uuid::Uuid;
 
 #[test]
@@ -88,11 +87,7 @@ fn test_approval_creation() {
     let fixture = TestFixture::new();
     let request_id = Uuid::now_v7();
 
-    let approval = Approval::new(
-        request_id,
-        fixture.user_id,
-        ApprovalDecision::Approve,
-    );
+    let approval = Approval::new(request_id, fixture.user_id, ApprovalDecision::Approve);
 
     assert_eq!(approval.request_id, request_id);
     assert_eq!(approval.decision, ApprovalDecision::Approve);
@@ -104,13 +99,13 @@ fn test_approval_with_reason() {
     let fixture = TestFixture::new();
     let request_id = Uuid::now_v7();
 
-    let approval = Approval::new(
-        request_id,
-        fixture.user_id,
-        ApprovalDecision::Reject,
-    ).with_reason("Amount exceeds policy limit");
+    let approval = Approval::new(request_id, fixture.user_id, ApprovalDecision::Reject)
+        .with_reason("Amount exceeds policy limit");
 
-    assert_eq!(approval.reason, Some("Amount exceeds policy limit".to_string()));
+    assert_eq!(
+        approval.reason,
+        Some("Amount exceeds policy limit".to_string())
+    );
 }
 
 #[test]
@@ -231,7 +226,9 @@ fn test_request_with_timeout() {
     let request = OversightRequest::new(
         fixture.org_id,
         fixture.agent_id,
-        ActionType::Custom { type_id: "test".to_string() },
+        ActionType::Custom {
+            type_id: "test".to_string(),
+        },
         "Test request",
     )
     .with_timeout(3600); // 1 hour
@@ -245,7 +242,9 @@ fn test_request_add_reviewer() {
     let mut request = OversightRequest::new(
         fixture.org_id,
         fixture.agent_id,
-        ActionType::Custom { type_id: "test".to_string() },
+        ActionType::Custom {
+            type_id: "test".to_string(),
+        },
         "Test request",
     );
 

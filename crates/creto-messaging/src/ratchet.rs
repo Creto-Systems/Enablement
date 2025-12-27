@@ -46,10 +46,7 @@ pub struct RatchetState {
 
 impl RatchetState {
     /// Create a new ratchet state from X3DH shared secret.
-    pub fn initialize_sender(
-        shared_secret: &[u8],
-        their_dh_public: &[u8],
-    ) -> Self {
+    pub fn initialize_sender(shared_secret: &[u8], their_dh_public: &[u8]) -> Self {
         // TODO: Use HKDF to derive initial root and chain keys
 
         // Generate our DH key pair
@@ -155,9 +152,8 @@ impl DoubleRatchet {
         }
 
         // 1. Derive message key from chain key
-        let (message_key, next_chain_key) = self.kdf_chain(
-            self.state.send_chain_key.as_ref().unwrap(),
-        );
+        let (message_key, next_chain_key) =
+            self.kdf_chain(self.state.send_chain_key.as_ref().unwrap());
 
         // 2. Update chain key
         self.state.send_chain_key = Some(next_chain_key);
@@ -181,7 +177,10 @@ impl DoubleRatchet {
     /// Decrypt a message.
     pub fn decrypt(&mut self, message: &EncryptedMessage) -> creto_common::CretoResult<Vec<u8>> {
         // Check if we need to perform a DH ratchet
-        let need_ratchet = self.state.their_dh_public.as_ref()
+        let need_ratchet = self
+            .state
+            .their_dh_public
+            .as_ref()
             .map(|k| k != &message.header.dh_public)
             .unwrap_or(true);
 
@@ -191,7 +190,10 @@ impl DoubleRatchet {
         }
 
         // Check for skipped messages
-        let skip_key = (message.header.dh_public.clone(), message.header.message_number);
+        let skip_key = (
+            message.header.dh_public.clone(),
+            message.header.message_number,
+        );
         if let Some(message_key) = self.state.skipped_keys.remove(&skip_key) {
             return Self::aead_decrypt(&message_key, &message.ciphertext);
         }
@@ -200,12 +202,10 @@ impl DoubleRatchet {
         self.skip_messages(message.header.message_number)?;
 
         // Derive message key
-        let (message_key, next_chain_key) = self.kdf_chain(
-            self.state.recv_chain_key.as_ref()
-                .ok_or_else(|| creto_common::CretoError::CryptoError(
-                    "No receiving chain".to_string()
-                ))?,
-        );
+        let (message_key, next_chain_key) =
+            self.kdf_chain(self.state.recv_chain_key.as_ref().ok_or_else(|| {
+                creto_common::CretoError::CryptoError("No receiving chain".to_string())
+            })?);
 
         self.state.recv_chain_key = Some(next_chain_key);
         self.state.recv_count += 1;
@@ -217,7 +217,9 @@ impl DoubleRatchet {
     fn dh_ratchet(&mut self, their_new_dh: &[u8]) -> creto_common::CretoResult<()> {
         // Store previous chain length for out-of-order handling
         if let Some(old_dh) = &self.state.their_dh_public {
-            self.state.prev_chain_lengths.push((old_dh.clone(), self.state.recv_count));
+            self.state
+                .prev_chain_lengths
+                .push((old_dh.clone(), self.state.recv_count));
         }
 
         // Update their DH public key
@@ -226,10 +228,9 @@ impl DoubleRatchet {
         // Derive new receiving chain key
         // DH(our_dh, their_new_dh) -> HKDF with root key
         let dh_output = self.dh(
-            self.state.dh_private.as_ref()
-                .ok_or_else(|| creto_common::CretoError::CryptoError(
-                    "No DH private key".to_string()
-                ))?,
+            self.state.dh_private.as_ref().ok_or_else(|| {
+                creto_common::CretoError::CryptoError("No DH private key".to_string())
+            })?,
             their_new_dh,
         );
 
@@ -243,10 +244,7 @@ impl DoubleRatchet {
         self.state.dh_private = Some(vec![0u8; 32]);
 
         // Derive new sending chain key
-        let dh_output = self.dh(
-            self.state.dh_private.as_ref().unwrap(),
-            their_new_dh,
-        );
+        let dh_output = self.dh(self.state.dh_private.as_ref().unwrap(), their_new_dh);
 
         let (new_root_key, send_chain_key) = self.kdf_root(&self.state.root_key, &dh_output);
         self.state.root_key = new_root_key;
@@ -264,18 +262,15 @@ impl DoubleRatchet {
             ));
         }
 
-        let their_dh = self.state.their_dh_public.clone()
-            .ok_or_else(|| creto_common::CretoError::CryptoError(
-                "No their DH public key".to_string()
-            ))?;
+        let their_dh = self.state.their_dh_public.clone().ok_or_else(|| {
+            creto_common::CretoError::CryptoError("No their DH public key".to_string())
+        })?;
 
         while self.state.recv_count < until {
-            let (message_key, next_chain_key) = self.kdf_chain(
-                self.state.recv_chain_key.as_ref()
-                    .ok_or_else(|| creto_common::CretoError::CryptoError(
-                        "No receiving chain".to_string()
-                    ))?,
-            );
+            let (message_key, next_chain_key) =
+                self.kdf_chain(self.state.recv_chain_key.as_ref().ok_or_else(|| {
+                    creto_common::CretoError::CryptoError("No receiving chain".to_string())
+                })?);
 
             let skip_key = (their_dh.clone(), self.state.recv_count);
             self.state.skipped_keys.insert(skip_key, message_key);
@@ -379,11 +374,8 @@ mod tests {
         let mut sender = DoubleRatchet::new_sender(&shared_secret, &signed_prekey_pub);
 
         // Create receiver ratchet
-        let mut receiver = DoubleRatchet::new_receiver(
-            &shared_secret,
-            &signed_prekey_pub,
-            &signed_prekey_priv,
-        );
+        let mut receiver =
+            DoubleRatchet::new_receiver(&shared_secret, &signed_prekey_pub, &signed_prekey_priv);
 
         // Sender encrypts
         let plaintext = b"Hello, world!";

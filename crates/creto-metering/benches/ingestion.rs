@@ -1,7 +1,7 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use creto_metering::{
-    Deduplicator, DedupConfig, EventValidator, UsageEvent, UsageEventType, ValidationConfig,
+    DedupConfig, Deduplicator, EventValidator, UsageEvent, UsageEventType, ValidationConfig,
 };
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use std::time::Duration;
 
 /// Helper function to create a sample usage event
@@ -124,7 +124,8 @@ fn bench_dedup_check(c: &mut Criterion) {
             let deduplicator = Deduplicator::local_only(config.clone());
             runtime.block_on(async {
                 for event in &events {
-                    let result = black_box(deduplicator.check_and_mark(&event.transaction_id).await);
+                    let result =
+                        black_box(deduplicator.check_and_mark(&event.transaction_id).await);
                     black_box(result);
                 }
             });
@@ -141,7 +142,8 @@ fn bench_dedup_check(c: &mut Criterion) {
                 let _ = deduplicator.check_and_mark(&event.transaction_id).await;
 
                 for _ in 0..1000 {
-                    let result = black_box(deduplicator.check_and_mark(&event.transaction_id).await);
+                    let result =
+                        black_box(deduplicator.check_and_mark(&event.transaction_id).await);
                     black_box(result);
                 }
             });
@@ -162,7 +164,8 @@ fn bench_dedup_check(c: &mut Criterion) {
                 }
 
                 for event in &events {
-                    let result = black_box(deduplicator.check_and_mark(&event.transaction_id).await);
+                    let result =
+                        black_box(deduplicator.check_and_mark(&event.transaction_id).await);
                     black_box(result);
                 }
             });
@@ -204,9 +207,8 @@ fn bench_batch_processing(c: &mut Criterion) {
             };
 
             let validator = EventValidator::new(validation_config);
-            let events: Vec<UsageEvent> = (0..*batch_size as u64)
-                .map(create_sample_event)
-                .collect();
+            let events: Vec<UsageEvent> =
+                (0..*batch_size as u64).map(create_sample_event).collect();
 
             b.iter(|| {
                 let deduplicator = Deduplicator::local_only(dedup_config.clone());

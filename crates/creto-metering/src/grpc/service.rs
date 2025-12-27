@@ -95,7 +95,11 @@ impl<I: EventIngestion> MeteringGrpcService<I> {
         }
 
         // Deduplicate
-        match self.deduplicator.check_and_mark(&event.transaction_id).await {
+        match self
+            .deduplicator
+            .check_and_mark(&event.transaction_id)
+            .await
+        {
             Ok(DedupResult::Duplicate) => {
                 self.record_duplicate().await;
                 return IngestEventResponse {
@@ -113,9 +117,12 @@ impl<I: EventIngestion> MeteringGrpcService<I> {
 
         // Check quota if enabled
         if self.config.enforce_quotas {
-            let quota_result = self
-                .quota_enforcer
-                .check(&event.organization_id, &event.agent_id, &event.code, event.quantity);
+            let quota_result = self.quota_enforcer.check(
+                &event.organization_id,
+                &event.agent_id,
+                &event.code,
+                event.quantity,
+            );
 
             match quota_result {
                 Ok(check) if !check.allowed => {
@@ -123,7 +130,10 @@ impl<I: EventIngestion> MeteringGrpcService<I> {
                     return IngestEventResponse {
                         success: false,
                         status: IngestStatus::QuotaExceeded,
-                        error_message: Some(format!("Quota exceeded: {}% used", check.usage_percentage * 100.0)),
+                        error_message: Some(format!(
+                            "Quota exceeded: {}% used",
+                            check.usage_percentage * 100.0
+                        )),
                     };
                 }
                 Err(e) => {
@@ -249,7 +259,10 @@ impl<I: EventIngestion> MeteringGrpcService<I> {
         }
 
         // Batch deduplication check
-        let txn_ids: Vec<&str> = valid_events.iter().map(|e| e.transaction_id.as_str()).collect();
+        let txn_ids: Vec<&str> = valid_events
+            .iter()
+            .map(|e| e.transaction_id.as_str())
+            .collect();
         let dedup_results = match self.deduplicator.check_and_mark_batch(&txn_ids).await {
             Ok(r) => r,
             Err(e) => {
@@ -332,20 +345,22 @@ impl<I: EventIngestion> MeteringGrpcService<I> {
             None => creto_common::AgentId::new(),
         };
 
-        let result = self
-            .quota_enforcer
-            .check(&org_id, &agent_id, &request.metric_code, request.quantity);
+        let result =
+            self.quota_enforcer
+                .check(&org_id, &agent_id, &request.metric_code, request.quantity);
 
         match result {
-            Ok(check) => {
-                CheckQuotaResponse {
-                    allowed: check.allowed,
-                    current_usage: check.current_usage,
-                    limit: check.limit,
-                    remaining: check.remaining,
-                    denial_reason: if check.allowed { None } else { Some("Quota exceeded".to_string()) },
-                }
-            }
+            Ok(check) => CheckQuotaResponse {
+                allowed: check.allowed,
+                current_usage: check.current_usage,
+                limit: check.limit,
+                remaining: check.remaining,
+                denial_reason: if check.allowed {
+                    None
+                } else {
+                    Some("Quota exceeded".to_string())
+                },
+            },
             Err(e) => CheckQuotaResponse {
                 allowed: false,
                 current_usage: 0,
@@ -382,7 +397,7 @@ impl<I: EventIngestion> MeteringGrpcService<I> {
             current_usage: status.current_usage,
             remaining: status.remaining,
             usage_percentage: status.usage_percentage * 100.0, // Convert to percentage
-            period: GrpcQuotaPeriod::Daily, // TODO: Map from actual period
+            period: GrpcQuotaPeriod::Daily,                    // TODO: Map from actual period
             period_start: status.resets_at - chrono::Duration::days(1), // Approximate start
             period_end: status.resets_at,
         })
@@ -533,9 +548,7 @@ mod tests {
         assert_eq!(r1.status, IngestStatus::Accepted);
 
         // Second ingestion - should be duplicate
-        let r2 = service
-            .ingest_event(IngestEventRequest { event })
-            .await;
+        let r2 = service.ingest_event(IngestEventRequest { event }).await;
         assert_eq!(r2.status, IngestStatus::Duplicate);
     }
 

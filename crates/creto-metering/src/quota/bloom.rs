@@ -64,9 +64,7 @@ impl QuotaBloomFilter {
         let num_hashes = config.calculate_num_hashes();
         let num_words = bit_size.div_ceil(64);
 
-        let bits: Vec<AtomicU64> = (0..num_words)
-            .map(|_| AtomicU64::new(0))
-            .collect();
+        let bits: Vec<AtomicU64> = (0..num_words).map(|_| AtomicU64::new(0)).collect();
 
         // Generate hash seeds using golden ratio
         let hash_seeds: Vec<u64> = (0..num_hashes)
@@ -180,12 +178,7 @@ pub struct QuotaKey {
 
 impl QuotaKey {
     /// Create a quota key from components.
-    pub fn new(
-        org_id: &str,
-        agent_id: &str,
-        metric_code: &str,
-        period: &str,
-    ) -> Self {
+    pub fn new(org_id: &str, agent_id: &str, metric_code: &str, period: &str) -> Self {
         Self {
             key: format!("{}:{}:{}:{}", org_id, agent_id, metric_code, period),
         }

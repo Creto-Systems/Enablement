@@ -180,10 +180,7 @@ impl SlackChannel {
             request.context.to_string()
         };
 
-        let text = format!(
-            "Approval Required: {} by {}",
-            description, agent_id
-        );
+        let text = format!("Approval Required: {} by {}", description, agent_id);
 
         let blocks = if self.config.interactive_buttons {
             Some(vec![
@@ -264,12 +261,10 @@ impl SlackChannel {
     }
 
     /// Parse a Slack callback payload to extract approval decision.
-    pub fn parse_callback(
-        &self,
-        payload: &str,
-    ) -> CretoResult<(String, ApprovalDecision, String)> {
-        let callback: SlackCallback = serde_json::from_str(payload)
-            .map_err(|e| CretoError::SerializationError(format!("Invalid Slack callback: {}", e)))?;
+    pub fn parse_callback(&self, payload: &str) -> CretoResult<(String, ApprovalDecision, String)> {
+        let callback: SlackCallback = serde_json::from_str(payload).map_err(|e| {
+            CretoError::SerializationError(format!("Invalid Slack callback: {}", e))
+        })?;
 
         // Extract the first action
         let action = callback
@@ -428,7 +423,9 @@ impl ApprovalToken {
         let expected_signature = format!("{:x}", md5_hash(&format!("{}:{}", secret, payload)));
 
         if token.signature != expected_signature {
-            return Err(CretoError::UnauthorizedApprover("Invalid token signature".to_string()));
+            return Err(CretoError::UnauthorizedApprover(
+                "Invalid token signature".to_string(),
+            ));
         }
 
         Ok(token)
@@ -499,9 +496,21 @@ fn base64_decode(input: &str) -> Result<Vec<u8>, String> {
         }
 
         let v0 = char_to_val(chunk[0])? as u32;
-        let v1 = chunk.get(1).map(|&c| char_to_val(c)).transpose()?.unwrap_or(0) as u32;
-        let v2 = chunk.get(2).map(|&c| char_to_val(c)).transpose()?.unwrap_or(0) as u32;
-        let v3 = chunk.get(3).map(|&c| char_to_val(c)).transpose()?.unwrap_or(0) as u32;
+        let v1 = chunk
+            .get(1)
+            .map(|&c| char_to_val(c))
+            .transpose()?
+            .unwrap_or(0) as u32;
+        let v2 = chunk
+            .get(2)
+            .map(|&c| char_to_val(c))
+            .transpose()?
+            .unwrap_or(0) as u32;
+        let v3 = chunk
+            .get(3)
+            .map(|&c| char_to_val(c))
+            .transpose()?
+            .unwrap_or(0) as u32;
 
         let n = (v0 << 18) | (v1 << 12) | (v2 << 6) | v3;
 
@@ -561,10 +570,7 @@ impl EmailChannel {
 
         let approval_url = self.generate_approval_url(&request_id, approver_email);
 
-        let subject = format!(
-            "Approval Required: {} by {}",
-            description, agent_id
-        );
+        let subject = format!("Approval Required: {} by {}", description, agent_id);
 
         let html_body = format!(
             r#"<!DOCTYPE html>
@@ -860,7 +866,9 @@ mod tests {
         OversightRequest::new(
             OrganizationId::new(),
             AgentId::new(),
-            ActionType::Custom { type_id: "test_op".to_string() },
+            ActionType::Custom {
+                type_id: "test_op".to_string(),
+            },
             "Test operation",
         )
     }

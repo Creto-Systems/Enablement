@@ -24,10 +24,16 @@ pub enum ValidationError {
     QuantityTooLarge { value: i64, max: i64 },
 
     #[error("Event timestamp {timestamp} is too far in the future (max {max_hours}h ahead)")]
-    TimestampTooFuture { timestamp: DateTime<Utc>, max_hours: i64 },
+    TimestampTooFuture {
+        timestamp: DateTime<Utc>,
+        max_hours: i64,
+    },
 
     #[error("Event timestamp {timestamp} is too old (max {max_days}d in the past)")]
-    TimestampTooOld { timestamp: DateTime<Utc>, max_days: i64 },
+    TimestampTooOld {
+        timestamp: DateTime<Utc>,
+        max_days: i64,
+    },
 
     #[error("Metric code is required and must be non-empty")]
     EmptyMetricCode,
@@ -86,9 +92,9 @@ impl Default for ValidationConfig {
         Self {
             max_transaction_id_length: 255,
             max_quantity: 1_000_000_000, // 1 billion
-            max_future_hours: 1,          // 1 hour ahead
-            max_past_days: 30,            // 30 days back
-            max_properties_bytes: 65536,  // 64KB
+            max_future_hours: 1,         // 1 hour ahead
+            max_past_days: 30,           // 30 days back
+            max_properties_bytes: 65536, // 64KB
             max_delegation_depth: 10,
             max_external_subscription_id_length: 255,
             collect_all_errors: false,
@@ -102,8 +108,8 @@ impl ValidationConfig {
         Self {
             max_transaction_id_length: 128,
             max_quantity: 100_000_000,
-            max_future_hours: 0,  // No future events
-            max_past_days: 7,     // Only 7 days back
+            max_future_hours: 0,         // No future events
+            max_past_days: 7,            // Only 7 days back
             max_properties_bytes: 16384, // 16KB
             max_delegation_depth: 5,
             max_external_subscription_id_length: 128,
@@ -315,9 +321,7 @@ impl BatchValidationResult {
 fn is_valid_metric_code(code: &str) -> bool {
     !code.is_empty()
         && code.len() <= 64
-        && code
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+        && code.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 #[cfg(test)]
@@ -356,7 +360,10 @@ mod tests {
         event.quantity = 0;
 
         let result = validator.validate(&event);
-        assert!(matches!(result, Err(ValidationError::NonPositiveQuantity(0))));
+        assert!(matches!(
+            result,
+            Err(ValidationError::NonPositiveQuantity(0))
+        ));
     }
 
     #[test]
@@ -366,7 +373,10 @@ mod tests {
         event.quantity = -5;
 
         let result = validator.validate(&event);
-        assert!(matches!(result, Err(ValidationError::NonPositiveQuantity(-5))));
+        assert!(matches!(
+            result,
+            Err(ValidationError::NonPositiveQuantity(-5))
+        ));
     }
 
     #[test]
@@ -379,7 +389,10 @@ mod tests {
         event.quantity = 101;
 
         let result = validator.validate(&event);
-        assert!(matches!(result, Err(ValidationError::QuantityTooLarge { .. })));
+        assert!(matches!(
+            result,
+            Err(ValidationError::QuantityTooLarge { .. })
+        ));
     }
 
     #[test]
@@ -392,7 +405,10 @@ mod tests {
         event.timestamp = Utc::now() + Duration::hours(2);
 
         let result = validator.validate(&event);
-        assert!(matches!(result, Err(ValidationError::TimestampTooFuture { .. })));
+        assert!(matches!(
+            result,
+            Err(ValidationError::TimestampTooFuture { .. })
+        ));
     }
 
     #[test]
@@ -405,7 +421,10 @@ mod tests {
         event.timestamp = Utc::now() - Duration::days(10);
 
         let result = validator.validate(&event);
-        assert!(matches!(result, Err(ValidationError::TimestampTooOld { .. })));
+        assert!(matches!(
+            result,
+            Err(ValidationError::TimestampTooOld { .. })
+        ));
     }
 
     #[test]
@@ -482,6 +501,9 @@ mod tests {
         event.delegation_depth = 10;
 
         let result = validator.validate(&event);
-        assert!(matches!(result, Err(ValidationError::DelegationDepthTooDeep { .. })));
+        assert!(matches!(
+            result,
+            Err(ValidationError::DelegationDepthTooDeep { .. })
+        ));
     }
 }

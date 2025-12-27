@@ -19,7 +19,11 @@ async fn test_amount_threshold_triggers_oversight() {
     let decision = engine.evaluate(&action, &context).await.unwrap();
 
     assert!(decision.requires_oversight());
-    if let PolicyDecision::RequiresOversight { reason, suggested_reviewers } = decision {
+    if let PolicyDecision::RequiresOversight {
+        reason,
+        suggested_reviewers,
+    } = decision
+    {
         assert!(reason.contains("High-value"));
         assert!(suggested_reviewers.contains(&"finance_manager".to_string()));
     } else {
@@ -118,9 +122,16 @@ async fn test_policy_evaluator_integration() {
         risk_level: "high".to_string(),
     };
 
-    let decision = engine.evaluate(&high_risk_code, &PolicyContext::default()).await.unwrap();
+    let decision = engine
+        .evaluate(&high_risk_code, &PolicyContext::default())
+        .await
+        .unwrap();
     assert!(decision.requires_oversight());
-    if let PolicyDecision::RequiresOversight { suggested_reviewers, .. } = decision {
+    if let PolicyDecision::RequiresOversight {
+        suggested_reviewers,
+        ..
+    } = decision
+    {
         assert!(suggested_reviewers.contains(&"security_team".to_string()));
     }
 
@@ -130,7 +141,10 @@ async fn test_policy_evaluator_integration() {
         risk_level: "low".to_string(),
     };
 
-    let decision = engine.evaluate(&low_risk_code, &PolicyContext::default()).await.unwrap();
+    let decision = engine
+        .evaluate(&low_risk_code, &PolicyContext::default())
+        .await
+        .unwrap();
     assert!(decision.is_allowed());
 }
 

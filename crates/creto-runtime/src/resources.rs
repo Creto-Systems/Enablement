@@ -35,10 +35,10 @@ pub struct ResourceLimits {
 impl Default for ResourceLimits {
     fn default() -> Self {
         Self {
-            memory_bytes: 512 * 1024 * 1024,      // 512 MB
-            cpu_time_ms: 60_000,                   // 60 seconds CPU time
-            wall_time_seconds: 300,               // 5 minutes wall time
-            disk_bytes: 1024 * 1024 * 1024,       // 1 GB
+            memory_bytes: 512 * 1024 * 1024, // 512 MB
+            cpu_time_ms: 60_000,             // 60 seconds CPU time
+            wall_time_seconds: 300,          // 5 minutes wall time
+            disk_bytes: 1024 * 1024 * 1024,  // 1 GB
             max_processes: 32,
             max_open_files: 256,
             network_bandwidth_bps: None,
@@ -51,10 +51,10 @@ impl ResourceLimits {
     /// Create minimal limits for quick tasks.
     pub fn minimal() -> Self {
         Self {
-            memory_bytes: 128 * 1024 * 1024,      // 128 MB
-            cpu_time_ms: 5_000,                    // 5 seconds
-            wall_time_seconds: 30,                // 30 seconds
-            disk_bytes: 100 * 1024 * 1024,        // 100 MB
+            memory_bytes: 128 * 1024 * 1024, // 128 MB
+            cpu_time_ms: 5_000,              // 5 seconds
+            wall_time_seconds: 30,           // 30 seconds
+            disk_bytes: 100 * 1024 * 1024,   // 100 MB
             max_processes: 4,
             max_open_files: 32,
             network_bandwidth_bps: None,
@@ -66,7 +66,7 @@ impl ResourceLimits {
     pub fn generous() -> Self {
         Self {
             memory_bytes: 4 * 1024 * 1024 * 1024, // 4 GB
-            cpu_time_ms: 600_000,                  // 10 minutes CPU time
+            cpu_time_ms: 600_000,                 // 10 minutes CPU time
             wall_time_seconds: 3600,              // 1 hour wall time
             disk_bytes: 10 * 1024 * 1024 * 1024,  // 10 GB
             max_processes: 128,
@@ -192,7 +192,8 @@ impl ResourceUsage {
         ResourcePercentages {
             memory: (self.memory_bytes as f64 / limits.memory_bytes as f64 * 100.0) as u8,
             cpu_time: (self.cpu_time_ms as f64 / limits.cpu_time_ms as f64 * 100.0) as u8,
-            wall_time: (self.wall_time_ms as f64 / (limits.wall_time_seconds as f64 * 1000.0) * 100.0) as u8,
+            wall_time: (self.wall_time_ms as f64 / (limits.wall_time_seconds as f64 * 1000.0)
+                * 100.0) as u8,
             disk: (self.disk_bytes as f64 / limits.disk_bytes as f64 * 100.0) as u8,
         }
     }
@@ -237,28 +238,60 @@ impl std::fmt::Display for ResourceViolation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::MemoryExceeded { used, limit } => {
-                write!(f, "Memory limit exceeded: {} bytes used, {} bytes limit", used, limit)
+                write!(
+                    f,
+                    "Memory limit exceeded: {} bytes used, {} bytes limit",
+                    used, limit
+                )
             }
             Self::CpuTimeExceeded { used_ms, limit_ms } => {
-                write!(f, "CPU time limit exceeded: {}ms used, {}ms limit", used_ms, limit_ms)
+                write!(
+                    f,
+                    "CPU time limit exceeded: {}ms used, {}ms limit",
+                    used_ms, limit_ms
+                )
             }
             Self::WallTimeExceeded { used_ms, limit_ms } => {
-                write!(f, "Wall time limit exceeded: {}ms used, {}ms limit", used_ms, limit_ms)
+                write!(
+                    f,
+                    "Wall time limit exceeded: {}ms used, {}ms limit",
+                    used_ms, limit_ms
+                )
             }
             Self::DiskExceeded { used, limit } => {
-                write!(f, "Disk limit exceeded: {} bytes used, {} bytes limit", used, limit)
+                write!(
+                    f,
+                    "Disk limit exceeded: {} bytes used, {} bytes limit",
+                    used, limit
+                )
             }
             Self::ProcessLimitExceeded { count, limit } => {
-                write!(f, "Process limit exceeded: {} processes, {} limit", count, limit)
+                write!(
+                    f,
+                    "Process limit exceeded: {} processes, {} limit",
+                    count, limit
+                )
             }
             Self::OpenFileLimitExceeded { count, limit } => {
-                write!(f, "Open file limit exceeded: {} files, {} limit", count, limit)
+                write!(
+                    f,
+                    "Open file limit exceeded: {} files, {} limit",
+                    count, limit
+                )
             }
             Self::ConnectionLimitExceeded { count, limit } => {
-                write!(f, "Connection limit exceeded: {} connections, {} limit", count, limit)
+                write!(
+                    f,
+                    "Connection limit exceeded: {} connections, {} limit",
+                    count, limit
+                )
             }
             Self::BandwidthExceeded { bps, limit_bps } => {
-                write!(f, "Bandwidth limit exceeded: {} bps, {} bps limit", bps, limit_bps)
+                write!(
+                    f,
+                    "Bandwidth limit exceeded: {} bps, {} bps limit",
+                    bps, limit_bps
+                )
             }
         }
     }
@@ -307,7 +340,10 @@ mod tests {
         };
 
         let violation = usage.exceeds(&limits);
-        assert!(matches!(violation, Some(ResourceViolation::MemoryExceeded { .. })));
+        assert!(matches!(
+            violation,
+            Some(ResourceViolation::MemoryExceeded { .. })
+        ));
     }
 
     #[test]

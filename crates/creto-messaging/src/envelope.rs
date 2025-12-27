@@ -68,12 +68,14 @@ impl Envelope {
 
     /// Serialize to bytes.
     pub fn to_bytes(&self) -> creto_common::CretoResult<Vec<u8>> {
-        serde_json::to_vec(self).map_err(|e| creto_common::CretoError::SerializationError(e.to_string()))
+        serde_json::to_vec(self)
+            .map_err(|e| creto_common::CretoError::SerializationError(e.to_string()))
     }
 
     /// Deserialize from bytes.
     pub fn from_bytes(bytes: &[u8]) -> creto_common::CretoResult<Self> {
-        serde_json::from_slice(bytes).map_err(|e| creto_common::CretoError::SerializationError(e.to_string()))
+        serde_json::from_slice(bytes)
+            .map_err(|e| creto_common::CretoError::SerializationError(e.to_string()))
     }
 }
 
@@ -145,7 +147,6 @@ pub enum ContentType {
     /// Control message (session management).
     Control,
 }
-
 
 /// Delivery receipt for a message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -247,12 +248,7 @@ mod tests {
             message_number: 1,
         };
 
-        let envelope = Envelope::new(
-            sender,
-            recipient,
-            ratchet_header,
-            vec![1, 2, 3, 4],
-        );
+        let envelope = Envelope::new(sender, recipient, ratchet_header, vec![1, 2, 3, 4]);
 
         assert_eq!(envelope.header.sender_id, sender);
         assert_eq!(envelope.header.recipient_id, recipient);

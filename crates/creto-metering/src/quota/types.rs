@@ -114,7 +114,6 @@ pub enum QuotaPeriod {
     Lifetime,
 }
 
-
 impl QuotaPeriod {
     /// Calculate the start and end bounds for a period containing the given timestamp.
     pub fn calculate_bounds(&self, timestamp: DateTime<Utc>) -> (DateTime<Utc>, DateTime<Utc>) {
@@ -235,12 +234,7 @@ mod tests {
 
     #[test]
     fn test_quota_would_exceed() {
-        let mut quota = Quota::new(
-            OrganizationId::new(),
-            "api_calls",
-            100,
-            QuotaPeriod::Daily,
-        );
+        let mut quota = Quota::new(OrganizationId::new(), "api_calls", 100, QuotaPeriod::Daily);
 
         assert!(!quota.would_exceed(50));
         quota.current_usage = 90;
@@ -250,12 +244,7 @@ mod tests {
 
     #[test]
     fn test_quota_usage_percentage() {
-        let mut quota = Quota::new(
-            OrganizationId::new(),
-            "tokens",
-            1000,
-            QuotaPeriod::Monthly,
-        );
+        let mut quota = Quota::new(OrganizationId::new(), "tokens", 1000, QuotaPeriod::Monthly);
 
         assert_eq!(quota.usage_percentage(), 0.0);
         quota.current_usage = 500;

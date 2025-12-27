@@ -64,8 +64,7 @@ pub struct RuntimePoolConfig {
 }
 
 /// Statistics about the warm pool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PoolStats {
     /// Total sandboxes in pool.
     pub total: usize,
@@ -82,7 +81,6 @@ pub struct PoolStats {
     /// Per-runtime breakdown.
     pub by_runtime: HashMap<String, RuntimePoolStats>,
 }
-
 
 /// Per-runtime statistics.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -224,7 +222,10 @@ impl WarmPool {
         );
 
         if is_ready {
-            ready_map.entry(runtime.clone()).or_default().push(sandbox_id);
+            ready_map
+                .entry(runtime.clone())
+                .or_default()
+                .push(sandbox_id);
             stats.ready += 1;
         }
 
@@ -285,9 +286,7 @@ impl WarmPool {
 
         let expired: Vec<SandboxId> = sandboxes
             .iter()
-            .filter(|(_, pooled)| {
-                !pooled.acquired && pooled.sandbox.is_idle_expired(idle_timeout)
-            })
+            .filter(|(_, pooled)| !pooled.acquired && pooled.sandbox.is_idle_expired(idle_timeout))
             .map(|(id, _)| *id)
             .collect();
 

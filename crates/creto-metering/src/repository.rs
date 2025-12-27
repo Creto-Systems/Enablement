@@ -150,7 +150,10 @@ impl EventRepository for PgEventRepository {
     }
 
     async fn insert_events_batch(&self, events: &[UsageEvent]) -> Result<usize, CretoError> {
-        let mut tx = self.pool.begin().await
+        let mut tx = self
+            .pool
+            .begin()
+            .await
             .map_err(|e| CretoError::Database(e.to_string()))?;
         let mut count = 0;
 
@@ -183,7 +186,8 @@ impl EventRepository for PgEventRepository {
             }
         }
 
-        tx.commit().await
+        tx.commit()
+            .await
             .map_err(|e| CretoError::Database(e.to_string()))?;
         Ok(count)
     }
@@ -216,8 +220,9 @@ impl EventRepository for PgEventRepository {
         let mut events = Vec::with_capacity(rows.len());
         for row in rows {
             let event_type_str: String = row.get("event_type");
-            let event_type = UsageEventType::from_db_str(&event_type_str)
-                .ok_or_else(|| CretoError::Database(format!("Unknown event type: {}", event_type_str)))?;
+            let event_type = UsageEventType::from_db_str(&event_type_str).ok_or_else(|| {
+                CretoError::Database(format!("Unknown event type: {}", event_type_str))
+            })?;
 
             events.push(UsageEvent {
                 transaction_id: row.get("transaction_id"),

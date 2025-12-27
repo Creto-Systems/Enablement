@@ -110,13 +110,9 @@ impl PricingModel {
 
             PricingStrategy::PerUnit { unit_price_cents } => usage * unit_price_cents,
 
-            PricingStrategy::GraduatedTiered { tiers } => {
-                Self::calculate_graduated(usage, tiers)
-            }
+            PricingStrategy::GraduatedTiered { tiers } => Self::calculate_graduated(usage, tiers),
 
-            PricingStrategy::VolumeTiered { tiers } => {
-                Self::calculate_volume(usage, tiers)
-            }
+            PricingStrategy::VolumeTiered { tiers } => Self::calculate_volume(usage, tiers),
 
             PricingStrategy::Package {
                 package_size,
@@ -173,9 +169,7 @@ impl PricingModel {
         // Find the applicable tier
         let tier = tiers
             .iter()
-            .find(|t| {
-                usage >= t.from_units && t.to_units.map(|to| usage < to).unwrap_or(true)
-            })
+            .find(|t| usage >= t.from_units && t.to_units.map(|to| usage < to).unwrap_or(true))
             .unwrap_or_else(|| tiers.last().expect("At least one tier required"));
 
         let flat_fee = tier.flat_fee_cents.unwrap_or(0);

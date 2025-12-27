@@ -109,11 +109,7 @@ impl MessagingService {
         let x3dh_result = X3DH::initiate(local_bundle, &remote_bundle)?;
 
         // Create session
-        let session = Session::new_initiator(
-            local_bundle.agent_id,
-            remote_agent,
-            &x3dh_result,
-        );
+        let session = Session::new_initiator(local_bundle.agent_id, remote_agent, &x3dh_result);
 
         let session_id = session.id;
 
@@ -136,17 +132,10 @@ impl MessagingService {
     }
 
     /// Send a message to another agent.
-    pub async fn send(
-        &self,
-        session_id: Uuid,
-        message: &[u8],
-    ) -> CretoResult<DeliveryReceipt> {
+    pub async fn send(&self, session_id: Uuid, message: &[u8]) -> CretoResult<DeliveryReceipt> {
         let mut sessions = self.sessions.write().await;
         let session = sessions.get_mut(&session_id).ok_or_else(|| {
-            creto_common::CretoError::SessionError(format!(
-                "Session {} not found",
-                session_id
-            ))
+            creto_common::CretoError::SessionError(format!("Session {} not found", session_id))
         })?;
 
         // Encrypt message

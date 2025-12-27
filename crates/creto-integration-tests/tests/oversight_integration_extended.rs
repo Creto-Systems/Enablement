@@ -2,11 +2,13 @@
 
 use creto_integration_tests::common::TestFixture;
 use creto_oversight::{
-    approval::{Approval, ApprovalDecision, QuorumConfig, QuorumCalculator},
-    channels::{ChannelType, EmailChannel, EmailConfig, SlackChannel, SlackConfig, NotificationChannel},
+    approval::{Approval, ApprovalDecision, QuorumCalculator, QuorumConfig},
+    channels::{
+        ChannelType, EmailChannel, EmailConfig, NotificationChannel, SlackChannel, SlackConfig,
+    },
     policy::{PolicyContext, PolicyEngine, TrustLevel},
     request::{ActionType, OversightRequest, Priority, RequestStatus},
-    service::{OversightService, OversightCheckResult},
+    service::{OversightCheckResult, OversightService},
     state::StateMachine,
 };
 use uuid::Uuid;
@@ -232,14 +234,8 @@ fn test_state_machine_with_checkpoints() {
 
     // Transition through states, simulating checkpoints at each step
     let transitions = vec![
-        (
-            RequestStatus::InReview,
-            "First reviewer started review",
-        ),
-        (
-            RequestStatus::Approved,
-            "Quorum reached, request approved",
-        ),
+        (RequestStatus::InReview, "First reviewer started review"),
+        (RequestStatus::Approved, "Quorum reached, request approved"),
     ];
 
     for (status, comment) in transitions {

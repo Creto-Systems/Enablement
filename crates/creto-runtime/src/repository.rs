@@ -10,9 +10,9 @@ use creto_common::{AgentId, CretoError, OrganizationId};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use crate::sandbox::{SandboxId, SandboxState};
 use crate::execution::ExecutionStatus;
 use crate::resources::ResourceUsage;
+use crate::sandbox::{SandboxId, SandboxState};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enum Serialization Helpers
@@ -114,7 +114,10 @@ pub trait SandboxRepository: Send + Sync {
     async fn terminate(&self, id: SandboxId) -> Result<(), CretoError>;
 
     /// List active sandboxes by organization.
-    async fn list_active_by_org(&self, org_id: OrganizationId) -> Result<Vec<SandboxRecord>, CretoError>;
+    async fn list_active_by_org(
+        &self,
+        org_id: OrganizationId,
+    ) -> Result<Vec<SandboxRecord>, CretoError>;
 
     /// Find idle sandboxes for cleanup.
     async fn find_idle(&self, idle_since: DateTime<Utc>) -> Result<Vec<SandboxId>, CretoError>;
@@ -219,7 +222,10 @@ impl SandboxRepository for PgSandboxRepository {
         Ok(())
     }
 
-    async fn list_active_by_org(&self, org_id: OrganizationId) -> Result<Vec<SandboxRecord>, CretoError> {
+    async fn list_active_by_org(
+        &self,
+        org_id: OrganizationId,
+    ) -> Result<Vec<SandboxRecord>, CretoError> {
         let rows = sqlx::query(
             r#"
             SELECT id, agent_id, runtime, state, network_policy, created_at, last_used_at
@@ -262,7 +268,10 @@ impl SandboxRepository for PgSandboxRepository {
         .await
         .map_err(|e| CretoError::Database(e.to_string()))?;
 
-        Ok(rows.into_iter().map(|r| SandboxId::from_uuid(r.get::<Uuid, _>("id"))).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| SandboxId::from_uuid(r.get::<Uuid, _>("id")))
+            .collect())
     }
 }
 
@@ -286,7 +295,12 @@ pub struct ExecutionRecord {
 #[async_trait::async_trait]
 pub trait ExecutionRepository: Send + Sync {
     /// Create an execution request.
-    async fn create(&self, sandbox_id: SandboxId, code: &str, timeout_seconds: i32) -> Result<Uuid, CretoError>;
+    async fn create(
+        &self,
+        sandbox_id: SandboxId,
+        code: &str,
+        timeout_seconds: i32,
+    ) -> Result<Uuid, CretoError>;
 
     /// Get execution request by ID.
     async fn get(&self, id: Uuid) -> Result<Option<ExecutionRecord>, CretoError>;
@@ -301,7 +315,10 @@ pub trait ExecutionRepository: Send + Sync {
     async fn mark_completed(&self, id: Uuid, duration_ms: i64) -> Result<(), CretoError>;
 
     /// List pending executions for a sandbox.
-    async fn list_pending_by_sandbox(&self, sandbox_id: SandboxId) -> Result<Vec<ExecutionRecord>, CretoError>;
+    async fn list_pending_by_sandbox(
+        &self,
+        sandbox_id: SandboxId,
+    ) -> Result<Vec<ExecutionRecord>, CretoError>;
 }
 
 /// PostgreSQL implementation of ExecutionRepository.
@@ -317,7 +334,12 @@ impl PgExecutionRepository {
 
 #[async_trait::async_trait]
 impl ExecutionRepository for PgExecutionRepository {
-    async fn create(&self, sandbox_id: SandboxId, code: &str, timeout_seconds: i32) -> Result<Uuid, CretoError> {
+    async fn create(
+        &self,
+        sandbox_id: SandboxId,
+        code: &str,
+        timeout_seconds: i32,
+    ) -> Result<Uuid, CretoError> {
         let row = sqlx::query(
             r#"
             INSERT INTO execution_requests (
@@ -410,7 +432,10 @@ impl ExecutionRepository for PgExecutionRepository {
         Ok(())
     }
 
-    async fn list_pending_by_sandbox(&self, sandbox_id: SandboxId) -> Result<Vec<ExecutionRecord>, CretoError> {
+    async fn list_pending_by_sandbox(
+        &self,
+        sandbox_id: SandboxId,
+    ) -> Result<Vec<ExecutionRecord>, CretoError> {
         let rows = sqlx::query(
             r#"
             SELECT id, status, queued_at, started_at, completed_at, duration_ms
@@ -532,13 +557,19 @@ mod tests {
 
     #[test]
     fn test_sandbox_state_roundtrip() {
-        assert_eq!(SandboxState::parse_db_str("creating"), SandboxState::Creating);
+        assert_eq!(
+            SandboxState::parse_db_str("creating"),
+            SandboxState::Creating
+        );
         assert_eq!(SandboxState::Creating.as_str(), "creating");
     }
 
     #[test]
     fn test_execution_status_roundtrip() {
-        assert_eq!(ExecutionStatus::parse_db_str("queued"), ExecutionStatus::Queued);
+        assert_eq!(
+            ExecutionStatus::parse_db_str("queued"),
+            ExecutionStatus::Queued
+        );
         assert_eq!(ExecutionStatus::Queued.as_str(), "queued");
     }
 }

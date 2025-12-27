@@ -26,10 +26,7 @@ impl InMemoryCheckpointRepository {
 
 #[async_trait::async_trait]
 impl CheckpointRepository for InMemoryCheckpointRepository {
-    async fn create(
-        &self,
-        checkpoint: &Checkpoint,
-    ) -> Result<Uuid, creto_common::CretoError> {
+    async fn create(&self, checkpoint: &Checkpoint) -> Result<Uuid, creto_common::CretoError> {
         let mut checkpoints = self.checkpoints.lock().unwrap();
         checkpoints.push(checkpoint.clone());
         Ok(checkpoint.id)
@@ -161,7 +158,12 @@ async fn test_checkpoint_crash_recovery_scenario() {
 
     // Save checkpoint before "crash"
     let checkpoint_id = service
-        .save_checkpoint(&request, &state_machine, context.clone(), Some("before_crash".to_string()))
+        .save_checkpoint(
+            &request,
+            &state_machine,
+            context.clone(),
+            Some("before_crash".to_string()),
+        )
         .await
         .unwrap();
 
@@ -253,10 +255,7 @@ async fn test_checkpoint_list_history() {
     assert_eq!(history.len(), 3);
 
     // Verify reasons are preserved
-    let checkpoint_reasons: Vec<_> = history
-        .iter()
-        .filter_map(|c| c.reason.as_deref())
-        .collect();
+    let checkpoint_reasons: Vec<_> = history.iter().filter_map(|c| c.reason.as_deref()).collect();
 
     assert!(checkpoint_reasons.contains(&"initial"));
     assert!(checkpoint_reasons.contains(&"after_approval_1"));

@@ -2,11 +2,11 @@
 //!
 //! Verifies the <100ms warm pool claim target and resource limit checks.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use creto_common::{AgentId, OrganizationId};
 use creto_runtime::{
     PoolConfig, ResourceLimits, ResourceUsage, Sandbox, SandboxConfig, SandboxState, WarmPool,
 };
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use std::time::Duration;
 
 /// Benchmark: Sandbox Creation
@@ -120,11 +120,11 @@ fn bench_resource_checks(c: &mut Criterion) {
 
     // ResourceUsage with all fields
     let usage_within = ResourceUsage {
-        memory_bytes: 256 * 1024 * 1024, // 256MB
+        memory_bytes: 256 * 1024 * 1024,      // 256MB
         peak_memory_bytes: 300 * 1024 * 1024, // 300MB peak
-        cpu_time_ms: 30_000,              // 30s
-        wall_time_ms: 100_000,            // 100s
-        disk_bytes: 500 * 1024 * 1024,   // 500MB
+        cpu_time_ms: 30_000,                  // 30s
+        wall_time_ms: 100_000,                // 100s
+        disk_bytes: 500 * 1024 * 1024,        // 500MB
         process_count: 16,
         open_file_count: 128,
         network_bytes_sent: 0,

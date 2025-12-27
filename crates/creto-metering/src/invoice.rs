@@ -87,10 +87,7 @@ impl Invoice {
 
     /// Add a line item to the invoice.
     pub fn add_line_item(&mut self, item: LineItem) {
-        self.subtotal = self
-            .subtotal
-            .add(&item.amount)
-            .expect("Same currency");
+        self.subtotal = self.subtotal.add(&item.amount).expect("Same currency");
         self.line_items.push(item);
         self.recalculate_total();
     }
@@ -253,9 +250,7 @@ impl Discount {
             DiscountType::FixedAmount { amount_cents } => {
                 (*amount_cents).min(subtotal_cents) // Can't discount more than subtotal
             }
-            DiscountType::Percentage { rate } => {
-                (subtotal_cents as f64 * rate / 100.0) as i64
-            }
+            DiscountType::Percentage { rate } => (subtotal_cents as f64 * rate / 100.0) as i64,
         }
     }
 }
@@ -380,7 +375,9 @@ impl InvoiceGenerator {
     }
 
     /// Get registered pricing models.
-    pub fn pricing_models(&self) -> &std::collections::HashMap<String, crate::pricing::PricingModel> {
+    pub fn pricing_models(
+        &self,
+    ) -> &std::collections::HashMap<String, crate::pricing::PricingModel> {
         &self.pricing_models
     }
 }
@@ -521,12 +518,8 @@ mod tests {
             },
         ];
 
-        let invoice = generator.generate_from_aggregations(
-            org_id,
-            period_start,
-            period_end,
-            &aggregations,
-        );
+        let invoice =
+            generator.generate_from_aggregations(org_id, period_start, period_end, &aggregations);
 
         assert_eq!(invoice.line_items.len(), 2);
         // Tokens: 5000 * $0.01 = $50.00
@@ -551,12 +544,8 @@ mod tests {
             unit: "hours".to_string(),
         }];
 
-        let invoice = generator.generate_from_aggregations(
-            org_id,
-            period_start,
-            period_end,
-            &aggregations,
-        );
+        let invoice =
+            generator.generate_from_aggregations(org_id, period_start, period_end, &aggregations);
 
         assert_eq!(invoice.subtotal.amount, 10000); // $100.00
         assert_eq!(invoice.tax.amount, 1000); // $10.00 tax
@@ -578,12 +567,7 @@ mod tests {
             unit: "GB".to_string(),
         }];
 
-        let invoice = generator.generate_and_issue(
-            org_id,
-            period_start,
-            period_end,
-            &aggregations,
-        );
+        let invoice = generator.generate_and_issue(org_id, period_start, period_end, &aggregations);
 
         assert_eq!(invoice.status, InvoiceStatus::Issued);
         assert!(invoice.issued_at.is_some());

@@ -124,7 +124,14 @@ impl AggregationEngine {
         // 2. If not available, query usage_events table
         // 3. Apply aggregation function
 
-        let _ = (organization_id, agent_id, metric_code, aggregation_type, period_start, period_end);
+        let _ = (
+            organization_id,
+            agent_id,
+            metric_code,
+            aggregation_type,
+            period_start,
+            period_end,
+        );
 
         todo!("Aggregation not yet implemented")
     }

@@ -272,11 +272,12 @@ impl CreditManager {
     ) -> CretoResult<CreditTransaction> {
         let mut wallets = self.wallets.write().unwrap();
 
-        let wallet = wallets
-            .get_mut(organization_id)
-            .ok_or_else(|| CretoError::BillingPeriodNotFound(
-                format!("Wallet not found for organization: {}", organization_id),
-            ))?;
+        let wallet = wallets.get_mut(organization_id).ok_or_else(|| {
+            CretoError::BillingPeriodNotFound(format!(
+                "Wallet not found for organization: {}",
+                organization_id
+            ))
+        })?;
 
         wallet.consume_credits(amount_cents)?;
 
@@ -502,7 +503,10 @@ mod tests {
         assert_eq!(history.len(), 4);
 
         // Most recent first
-        assert_eq!(history[0].transaction_type, CreditTransactionType::Consumption);
+        assert_eq!(
+            history[0].transaction_type,
+            CreditTransactionType::Consumption
+        );
         assert_eq!(history[1].transaction_type, CreditTransactionType::Grant);
     }
 }

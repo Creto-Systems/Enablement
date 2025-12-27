@@ -307,7 +307,9 @@ pub fn load_config<T: Default + Serialize + for<'de> Deserialize<'de>>(
 
 /// Load enablement configuration from defaults, file, and environment.
 #[cfg(feature = "config")]
-pub fn load_enablement_config(config_file: Option<&str>) -> Result<EnablementConfig, figment::Error> {
+pub fn load_enablement_config(
+    config_file: Option<&str>,
+) -> Result<EnablementConfig, figment::Error> {
     load_config("creto", config_file)
 }
 

@@ -226,7 +226,9 @@ async fn test_mock_channel_full_workflow() {
     let request = OversightRequest::new(
         OrganizationId::new(),
         AgentId::new(),
-        ActionType::Custom { type_id: "test".to_string() },
+        ActionType::Custom {
+            type_id: "test".to_string(),
+        },
         "Test operation",
     );
 

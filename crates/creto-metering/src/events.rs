@@ -160,15 +160,16 @@ impl UsageEventBuilder {
         let event_type = self.event_type.expect("event_type is required");
 
         UsageEvent {
-            transaction_id: self.transaction_id
+            transaction_id: self
+                .transaction_id
                 .unwrap_or_else(UsageEvent::generate_transaction_id),
-            organization_id: self.organization_id
-                .unwrap_or_default(),
-            agent_id: self.agent_id
-                .unwrap_or_default(),
+            organization_id: self.organization_id.unwrap_or_default(),
+            agent_id: self.agent_id.unwrap_or_default(),
             external_subscription_id: self.external_subscription_id,
             event_type,
-            code: self.code.unwrap_or_else(|| event_type.default_code().to_string()),
+            code: self
+                .code
+                .unwrap_or_else(|| event_type.default_code().to_string()),
             quantity: self.quantity.unwrap_or(1),
             timestamp: self.timestamp.unwrap_or_else(Utc::now),
             properties: self.properties,
@@ -288,7 +289,10 @@ pub trait LocalEventIngestion {
     /// Ingest multiple events in a batch.
     ///
     /// More efficient than individual ingestion for bulk imports.
-    async fn ingest_batch(&self, events: Vec<UsageEvent>) -> Result<usize, creto_common::CretoError>;
+    async fn ingest_batch(
+        &self,
+        events: Vec<UsageEvent>,
+    ) -> Result<usize, creto_common::CretoError>;
 }
 
 #[cfg(test)]
@@ -310,6 +314,9 @@ mod tests {
     #[test]
     fn test_event_type_codes() {
         assert_eq!(UsageEventType::InputTokens.default_code(), "input_tokens");
-        assert_eq!(UsageEventType::SandboxExecution.default_code(), "sandbox_executions");
+        assert_eq!(
+            UsageEventType::SandboxExecution.default_code(),
+            "sandbox_executions"
+        );
     }
 }

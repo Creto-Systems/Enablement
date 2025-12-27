@@ -413,8 +413,7 @@ mod tests {
         let service = MeteringService::new();
 
         // Service should be creatable without errors
-        let status =
-            service.get_quota_status(&OrganizationId::new(), &AgentId::new(), "api_calls");
+        let status = service.get_quota_status(&OrganizationId::new(), &AgentId::new(), "api_calls");
 
         // Just verify it doesn't panic
         let _ = status;

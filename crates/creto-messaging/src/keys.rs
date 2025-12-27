@@ -42,7 +42,7 @@ impl IdentityKey {
         Self {
             id: Uuid::now_v7(),
             agent_id,
-            public_key: vec![0u8; 32], // Placeholder
+            public_key: vec![0u8; 32],        // Placeholder
             private_key: Some(vec![0u8; 32]), // Placeholder
         }
     }
@@ -85,16 +85,14 @@ impl PreKey {
         // TODO: Use creto-crypto
         Self {
             id,
-            public_key: vec![0u8; 32], // Placeholder
+            public_key: vec![0u8; 32],        // Placeholder
             private_key: Some(vec![0u8; 32]), // Placeholder
         }
     }
 
     /// Generate a batch of pre-keys.
     pub fn generate_batch(start_id: u32, count: u32) -> Vec<Self> {
-        (start_id..start_id + count)
-            .map(PreKey::generate)
-            .collect()
+        (start_id..start_id + count).map(PreKey::generate).collect()
     }
 }
 
@@ -204,10 +202,7 @@ impl KeyBundle {
 #[async_trait::async_trait]
 pub trait KeyStore: Send + Sync {
     /// Store an identity key.
-    async fn store_identity_key(
-        &self,
-        key: &IdentityKey,
-    ) -> creto_common::CretoResult<()>;
+    async fn store_identity_key(&self, key: &IdentityKey) -> creto_common::CretoResult<()>;
 
     /// Get identity key for an agent.
     async fn get_identity_key(
@@ -216,22 +211,14 @@ pub trait KeyStore: Send + Sync {
     ) -> creto_common::CretoResult<Option<IdentityKey>>;
 
     /// Store a key bundle.
-    async fn store_bundle(
-        &self,
-        bundle: &KeyBundle,
-    ) -> creto_common::CretoResult<()>;
+    async fn store_bundle(&self, bundle: &KeyBundle) -> creto_common::CretoResult<()>;
 
     /// Get a key bundle for an agent.
-    async fn get_bundle(
-        &self,
-        agent_id: AgentId,
-    ) -> creto_common::CretoResult<Option<KeyBundle>>;
+    async fn get_bundle(&self, agent_id: AgentId) -> creto_common::CretoResult<Option<KeyBundle>>;
 
     /// Consume a one-time pre-key (returns and removes it).
-    async fn consume_pre_key(
-        &self,
-        agent_id: AgentId,
-    ) -> creto_common::CretoResult<Option<PreKey>>;
+    async fn consume_pre_key(&self, agent_id: AgentId)
+        -> creto_common::CretoResult<Option<PreKey>>;
 
     /// Upload new pre-keys.
     async fn upload_pre_keys(
@@ -241,10 +228,7 @@ pub trait KeyStore: Send + Sync {
     ) -> creto_common::CretoResult<()>;
 
     /// Get the count of remaining pre-keys.
-    async fn pre_key_count(
-        &self,
-        agent_id: AgentId,
-    ) -> creto_common::CretoResult<u32>;
+    async fn pre_key_count(&self, agent_id: AgentId) -> creto_common::CretoResult<u32>;
 }
 
 #[cfg(test)]

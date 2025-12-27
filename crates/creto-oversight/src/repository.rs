@@ -10,8 +10,8 @@ use creto_common::{AgentId, CretoError, OrganizationId, UserId};
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use crate::request::{OversightRequest, RequestStatus, ActionType, Priority};
 use crate::approval::{Approval, ApprovalDecision};
+use crate::request::{ActionType, OversightRequest, Priority, RequestStatus};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enum Serialization Helpers
@@ -51,7 +51,7 @@ impl Priority {
     pub fn as_str(&self) -> &'static str {
         match self {
             Priority::Low => "low",
-            Priority::Normal => "medium",  // DB uses "medium" for Normal
+            Priority::Normal => "medium", // DB uses "medium" for Normal
             Priority::High => "high",
             Priority::Critical => "critical",
         }
@@ -111,10 +111,17 @@ pub trait RequestRepository: Send + Sync {
     async fn update_status(&self, id: Uuid, status: RequestStatus) -> Result<(), CretoError>;
 
     /// List pending requests for an organization.
-    async fn list_pending(&self, org_id: OrganizationId) -> Result<Vec<OversightRequest>, CretoError>;
+    async fn list_pending(
+        &self,
+        org_id: OrganizationId,
+    ) -> Result<Vec<OversightRequest>, CretoError>;
 
     /// List requests by agent.
-    async fn list_by_agent(&self, agent_id: AgentId, limit: i64) -> Result<Vec<OversightRequest>, CretoError>;
+    async fn list_by_agent(
+        &self,
+        agent_id: AgentId,
+        limit: i64,
+    ) -> Result<Vec<OversightRequest>, CretoError>;
 
     /// Find timed-out requests.
     async fn find_timed_out(&self) -> Result<Vec<Uuid>, CretoError>;
@@ -180,8 +187,10 @@ impl RequestRepository for PgRequestRepository {
         match row {
             Some(r) => {
                 let action_data: serde_json::Value = r.get("action_data");
-                let action_type: ActionType = serde_json::from_value(action_data)
-                    .unwrap_or(ActionType::Custom { type_id: "unknown".to_string() });
+                let action_type: ActionType =
+                    serde_json::from_value(action_data).unwrap_or(ActionType::Custom {
+                        type_id: "unknown".to_string(),
+                    });
 
                 Ok(Some(OversightRequest {
                     id,
@@ -221,7 +230,10 @@ impl RequestRepository for PgRequestRepository {
         Ok(())
     }
 
-    async fn list_pending(&self, org_id: OrganizationId) -> Result<Vec<OversightRequest>, CretoError> {
+    async fn list_pending(
+        &self,
+        org_id: OrganizationId,
+    ) -> Result<Vec<OversightRequest>, CretoError> {
         let rows = sqlx::query(
             r#"
             SELECT id, agent_id, action_type, action_data, description,
@@ -246,8 +258,10 @@ impl RequestRepository for PgRequestRepository {
         let mut requests = Vec::with_capacity(rows.len());
         for r in rows {
             let action_data: serde_json::Value = r.get("action_data");
-            let action_type: ActionType = serde_json::from_value(action_data)
-                .unwrap_or(ActionType::Custom { type_id: "unknown".to_string() });
+            let action_type: ActionType =
+                serde_json::from_value(action_data).unwrap_or(ActionType::Custom {
+                    type_id: "unknown".to_string(),
+                });
 
             requests.push(OversightRequest {
                 id: r.get("id"),
@@ -270,7 +284,11 @@ impl RequestRepository for PgRequestRepository {
         Ok(requests)
     }
 
-    async fn list_by_agent(&self, agent_id: AgentId, limit: i64) -> Result<Vec<OversightRequest>, CretoError> {
+    async fn list_by_agent(
+        &self,
+        agent_id: AgentId,
+        limit: i64,
+    ) -> Result<Vec<OversightRequest>, CretoError> {
         let rows = sqlx::query(
             r#"
             SELECT id, organization_id, action_type, action_data, description,
@@ -290,8 +308,10 @@ impl RequestRepository for PgRequestRepository {
         let mut requests = Vec::with_capacity(rows.len());
         for r in rows {
             let action_data: serde_json::Value = r.get("action_data");
-            let action_type: ActionType = serde_json::from_value(action_data)
-                .unwrap_or(ActionType::Custom { type_id: "unknown".to_string() });
+            let action_type: ActionType =
+                serde_json::from_value(action_data).unwrap_or(ActionType::Custom {
+                    type_id: "unknown".to_string(),
+                });
 
             requests.push(OversightRequest {
                 id: r.get("id"),
@@ -478,7 +498,10 @@ pub trait StateTransitionRepository: Send + Sync {
     async fn create(&self, record: &StateTransitionRecord) -> Result<Uuid, CretoError>;
 
     /// Get transition history for a request.
-    async fn list_by_request(&self, request_id: Uuid) -> Result<Vec<StateTransitionRecord>, CretoError>;
+    async fn list_by_request(
+        &self,
+        request_id: Uuid,
+    ) -> Result<Vec<StateTransitionRecord>, CretoError>;
 }
 
 /// PostgreSQL implementation of StateTransitionRepository.
@@ -516,7 +539,10 @@ impl StateTransitionRepository for PgStateTransitionRepository {
         Ok(row.get("id"))
     }
 
-    async fn list_by_request(&self, request_id: Uuid) -> Result<Vec<StateTransitionRecord>, CretoError> {
+    async fn list_by_request(
+        &self,
+        request_id: Uuid,
+    ) -> Result<Vec<StateTransitionRecord>, CretoError> {
         let rows = sqlx::query(
             r#"
             SELECT id, from_status, to_status, actor_type, actor_id, reason, transitioned_at
@@ -815,7 +841,10 @@ mod tests {
 
     #[test]
     fn test_request_status_roundtrip() {
-        assert_eq!(RequestStatus::parse_db_str("pending"), RequestStatus::Pending);
+        assert_eq!(
+            RequestStatus::parse_db_str("pending"),
+            RequestStatus::Pending
+        );
         assert_eq!(RequestStatus::Pending.as_str(), "pending");
     }
 
@@ -827,7 +856,10 @@ mod tests {
 
     #[test]
     fn test_approval_decision_roundtrip() {
-        assert_eq!(ApprovalDecision::parse_db_str("approve"), ApprovalDecision::Approve);
+        assert_eq!(
+            ApprovalDecision::parse_db_str("approve"),
+            ApprovalDecision::Approve
+        );
         assert_eq!(ApprovalDecision::Approve.as_str(), "approve");
     }
 

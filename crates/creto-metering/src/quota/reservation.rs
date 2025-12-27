@@ -175,7 +175,9 @@ impl ReservationStore {
 
         // Check available quota including existing reservations
         let current_reserved = {
-            let totals = self.reserved_totals.read()
+            let totals = self
+                .reserved_totals
+                .read()
                 .map_err(|e| ReservationError::LockError(e.to_string()))?;
             *totals.get(&total_key).unwrap_or(&0)
         };
@@ -205,14 +207,18 @@ impl ReservationStore {
 
         // Store reservation
         {
-            let mut reservations = self.reservations.write()
+            let mut reservations = self
+                .reservations
+                .write()
                 .map_err(|e| ReservationError::LockError(e.to_string()))?;
             reservations.insert(reservation.id, reservation.clone());
         }
 
         // Update reserved total
         {
-            let mut totals = self.reserved_totals.write()
+            let mut totals = self
+                .reserved_totals
+                .write()
                 .map_err(|e| ReservationError::LockError(e.to_string()))?;
             *totals.entry(total_key).or_insert(0) += request.amount;
         }
@@ -226,10 +232,13 @@ impl ReservationStore {
         reservation_id: Uuid,
         actual_amount: i64,
     ) -> Result<Reservation, ReservationError> {
-        let mut reservations = self.reservations.write()
+        let mut reservations = self
+            .reservations
+            .write()
             .map_err(|e| ReservationError::LockError(e.to_string()))?;
 
-        let reservation = reservations.get_mut(&reservation_id)
+        let reservation = reservations
+            .get_mut(&reservation_id)
             .ok_or(ReservationError::NotFound(reservation_id))?;
 
         if reservation.status != ReservationStatus::Active {
@@ -252,9 +261,14 @@ impl ReservationStore {
         reservation.status = ReservationStatus::Committed;
 
         // Update reserved total (release the reservation)
-        let total_key = format!("{}:{}", reservation.organization_id, reservation.metric_code);
+        let total_key = format!(
+            "{}:{}",
+            reservation.organization_id, reservation.metric_code
+        );
         {
-            let mut totals = self.reserved_totals.write()
+            let mut totals = self
+                .reserved_totals
+                .write()
                 .map_err(|e| ReservationError::LockError(e.to_string()))?;
             if let Some(total) = totals.get_mut(&total_key) {
                 *total = (*total - reservation.reserved_amount).max(0);
@@ -266,10 +280,13 @@ impl ReservationStore {
 
     /// Release a reservation without using quota.
     pub fn release(&self, reservation_id: Uuid) -> Result<Reservation, ReservationError> {
-        let mut reservations = self.reservations.write()
+        let mut reservations = self
+            .reservations
+            .write()
             .map_err(|e| ReservationError::LockError(e.to_string()))?;
 
-        let reservation = reservations.get_mut(&reservation_id)
+        let reservation = reservations
+            .get_mut(&reservation_id)
             .ok_or(ReservationError::NotFound(reservation_id))?;
 
         if reservation.status != ReservationStatus::Active {
@@ -279,9 +296,14 @@ impl ReservationStore {
         reservation.status = ReservationStatus::Released;
 
         // Update reserved total
-        let total_key = format!("{}:{}", reservation.organization_id, reservation.metric_code);
+        let total_key = format!(
+            "{}:{}",
+            reservation.organization_id, reservation.metric_code
+        );
         {
-            let mut totals = self.reserved_totals.write()
+            let mut totals = self
+                .reserved_totals
+                .write()
                 .map_err(|e| ReservationError::LockError(e.to_string()))?;
             if let Some(total) = totals.get_mut(&total_key) {
                 *total = (*total - reservation.reserved_amount).max(0);
@@ -301,7 +323,9 @@ impl ReservationStore {
     pub fn get_total_reserved(&self, organization_id: Uuid, metric_code: &str) -> i64 {
         let total_key = format!("{}:{}", organization_id, metric_code);
         let totals = self.reserved_totals.read().ok();
-        totals.map(|t| *t.get(&total_key).unwrap_or(&0)).unwrap_or(0)
+        totals
+            .map(|t| *t.get(&total_key).unwrap_or(&0))
+            .unwrap_or(0)
     }
 
     /// Expire stale reservations (background task).
@@ -324,7 +348,10 @@ impl ReservationStore {
             if let Ok(mut totals) = self.reserved_totals.write() {
                 for id in &expired_ids {
                     if let Some(reservation) = reservations.get(id) {
-                        let total_key = format!("{}:{}", reservation.organization_id, reservation.metric_code);
+                        let total_key = format!(
+                            "{}:{}",
+                            reservation.organization_id, reservation.metric_code
+                        );
                         if let Some(total) = totals.get_mut(&total_key) {
                             *total = (*total - reservation.reserved_amount).max(0);
                         }
@@ -338,8 +365,13 @@ impl ReservationStore {
 
     /// Get count of active reservations.
     pub fn active_count(&self) -> usize {
-        self.reservations.read()
-            .map(|r| r.values().filter(|r| r.status == ReservationStatus::Active).count())
+        self.reservations
+            .read()
+            .map(|r| {
+                r.values()
+                    .filter(|r| r.status == ReservationStatus::Active)
+                    .count()
+            })
             .unwrap_or(0)
     }
 }
@@ -375,7 +407,10 @@ mod tests {
         let request = ReserveRequest::new(org_id, "agent1", "api_calls", 100);
         let result = store.reserve(request, 50); // Only 50 available
 
-        assert!(matches!(result, Err(ReservationError::InsufficientQuota { .. })));
+        assert!(matches!(
+            result,
+            Err(ReservationError::InsufficientQuota { .. })
+        ));
     }
 
     #[test]
@@ -402,7 +437,10 @@ mod tests {
 
         let result = store.commit(reservation.id, 150); // More than reserved
 
-        assert!(matches!(result, Err(ReservationError::ExceedsReserved { .. })));
+        assert!(matches!(
+            result,
+            Err(ReservationError::ExceedsReserved { .. })
+        ));
     }
 
     #[test]
@@ -431,7 +469,10 @@ mod tests {
         let req2 = ReserveRequest::new(org_id, "agent2", "api_calls", 600);
         let result = store.reserve(req2, 1000);
 
-        assert!(matches!(result, Err(ReservationError::InsufficientQuota { available: 400, .. })));
+        assert!(matches!(
+            result,
+            Err(ReservationError::InsufficientQuota { available: 400, .. })
+        ));
     }
 
     #[test]
@@ -467,6 +508,11 @@ mod tests {
         store.commit(reservation.id, 50).unwrap();
         let result = store.commit(reservation.id, 50);
 
-        assert!(matches!(result, Err(ReservationError::InvalidStatus(ReservationStatus::Committed))));
+        assert!(matches!(
+            result,
+            Err(ReservationError::InvalidStatus(
+                ReservationStatus::Committed
+            ))
+        ));
     }
 }

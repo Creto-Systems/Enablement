@@ -143,7 +143,6 @@ pub enum CompressionAlgorithm {
     Lz4,
 }
 
-
 /// Configuration for creating checkpoints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckpointConfig {
@@ -183,9 +182,7 @@ impl Default for CheckpointConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CheckpointError {
     /// Checkpoint not found.
-    NotFound {
-        checkpoint_id: CheckpointId,
-    },
+    NotFound { checkpoint_id: CheckpointId },
     /// Sandbox is not in a valid state for checkpointing.
     InvalidSandboxState {
         sandbox_id: SandboxId,
@@ -213,9 +210,7 @@ pub enum CheckpointError {
         message: String,
     },
     /// Storage backend error.
-    StorageError {
-        message: String,
-    },
+    StorageError { message: String },
 }
 
 impl std::fmt::Display for CheckpointError {
@@ -343,7 +338,7 @@ impl CheckpointManager for InMemoryCheckpointStore {
         let checkpoint = Checkpoint {
             id: CheckpointId::new(),
             sandbox_id,
-            agent_id: AgentId::new(), // Mock agent ID
+            agent_id: AgentId::new(),        // Mock agent ID
             state_snapshot: vec![0u8; 1024], // Mock 1KB snapshot
             filesystem_hash: "mock_hash_123".to_string(),
             memory_size: 1024 * 1024 * 128, // Mock 128MB

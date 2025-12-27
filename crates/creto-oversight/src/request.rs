@@ -115,7 +115,10 @@ impl OversightRequest {
 
     /// Check if the request is still pending.
     pub fn is_pending(&self) -> bool {
-        matches!(self.status, RequestStatus::Pending | RequestStatus::InReview)
+        matches!(
+            self.status,
+            RequestStatus::Pending | RequestStatus::InReview
+        )
     }
 }
 
@@ -216,10 +219,10 @@ impl Priority {
     /// Get the default timeout for this priority level.
     pub fn default_timeout_seconds(&self) -> u64 {
         match self {
-            Priority::Low => 604800,     // 7 days
-            Priority::Normal => 86400,   // 24 hours
-            Priority::High => 3600,      // 1 hour
-            Priority::Critical => 300,   // 5 minutes
+            Priority::Low => 604800,   // 7 days
+            Priority::Normal => 86400, // 24 hours
+            Priority::High => 3600,    // 1 hour
+            Priority::Critical => 300, // 5 minutes
         }
     }
 }

@@ -73,7 +73,10 @@ impl X3DH {
         // TODO: Implement actual cryptographic operations with creto-crypto
 
         // Verify recipient's signed pre-key
-        if !recipient_bundle.signed_pre_key.verify(&recipient_bundle.identity_key) {
+        if !recipient_bundle
+            .signed_pre_key
+            .verify(&recipient_bundle.identity_key)
+        {
             return Err(creto_common::CretoError::CryptoError(
                 "Invalid signed pre-key signature".to_string(),
             ));
@@ -257,7 +260,8 @@ mod tests {
         let recipient_bundle = KeyBundle::new(recipient_id);
 
         // Sender initiates
-        let init_result = X3DH::initiate(&sender_bundle, &recipient_bundle.public_bundle()).unwrap();
+        let init_result =
+            X3DH::initiate(&sender_bundle, &recipient_bundle.public_bundle()).unwrap();
 
         // Recipient responds
         let resp_result = X3DH::respond(
@@ -268,6 +272,9 @@ mod tests {
         .unwrap();
 
         // Both should have derived the same shared secret (in real impl)
-        assert_eq!(init_result.shared_secret.len(), resp_result.shared_secret.len());
+        assert_eq!(
+            init_result.shared_secret.len(),
+            resp_result.shared_secret.len()
+        );
     }
 }

@@ -45,20 +45,18 @@ pub mod service;
 pub mod state;
 pub mod triggers;
 
-pub use approval::{Approval, ApprovalDecision, QuorumConfig, QuorumCalculator, QuorumResult};
+pub use approval::{Approval, ApprovalDecision, QuorumCalculator, QuorumConfig, QuorumResult};
 pub use checkpoint::{Checkpoint, CheckpointManager, CheckpointRepository, CHECKPOINT_VERSION};
+pub use policy::{PolicyContext, PolicyDecision, TrustLevel};
 pub use repository::{
-    RequestRepository, PgRequestRepository,
-    ApprovalRepository, PgApprovalRepository, ApprovalCounts,
-    StateTransitionRepository, PgStateTransitionRepository, StateTransitionRecord,
-    QuorumConfigRepository, PgQuorumConfigRepository, QuorumConfigRecord,
-    PgCheckpointRepository,
+    ApprovalCounts, ApprovalRepository, PgApprovalRepository, PgCheckpointRepository,
+    PgQuorumConfigRepository, PgRequestRepository, PgStateTransitionRepository, QuorumConfigRecord,
+    QuorumConfigRepository, RequestRepository, StateTransitionRecord, StateTransitionRepository,
 };
-pub use request::{OversightRequest, RequestStatus, ActionType, Priority};
+pub use request::{ActionType, OversightRequest, Priority, RequestStatus};
 pub use service::OversightService;
 pub use state::{StateMachine, StateTransition};
-pub use policy::{PolicyContext, PolicyDecision, TrustLevel};
 pub use triggers::{
-    PolicyTriggerConfig, TriggerCondition, PolicyEvaluator, TriggerMatch,
-    ActionTypePattern, TrustLevelThreshold, MockCedarClient,
+    ActionTypePattern, MockCedarClient, PolicyEvaluator, PolicyTriggerConfig, TriggerCondition,
+    TriggerMatch, TrustLevelThreshold,
 };

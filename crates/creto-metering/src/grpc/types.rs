@@ -52,7 +52,6 @@ pub enum IngestStatus {
     InternalError,
 }
 
-
 /// Result for a specific event in a batch.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventResult {
@@ -138,7 +137,6 @@ pub enum GrpcUsageEventType {
     SandboxExecution = 41,
     MessageSent = 42,
 }
-
 
 impl GrpcUsageEventType {
     pub fn to_internal(self) -> UsageEventType {
@@ -234,7 +232,6 @@ pub enum GrpcQuotaPeriod {
     Monthly = 4,
     Lifetime = 5,
 }
-
 
 #[cfg(test)]
 mod tests {

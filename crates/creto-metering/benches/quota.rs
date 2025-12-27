@@ -2,8 +2,8 @@
 //!
 //! Verifies the <10µs p99 latency target for quota checks.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use creto_metering::{BloomConfig, Quota, QuotaBloomFilter, QuotaEnforcer, QuotaKey, QuotaPeriod};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use std::time::Duration;
 
 /// Benchmark: Bloom Filter Operations (<1µs target)
@@ -80,7 +80,12 @@ fn bench_enforcer_check(c: &mut Criterion) {
     // Register 100 quotas
     for i in 0..100u64 {
         let org_id = creto_common::OrganizationId::new();
-        let mut quota = Quota::new(org_id, format!("metric_{}", i), 1_000_000, QuotaPeriod::Daily);
+        let mut quota = Quota::new(
+            org_id,
+            format!("metric_{}", i),
+            1_000_000,
+            QuotaPeriod::Daily,
+        );
         quota.agent_id = Some(creto_common::AgentId::new());
         enforcer.register_quota(&quota);
     }
@@ -91,8 +96,7 @@ fn bench_enforcer_check(c: &mut Criterion) {
     group.bench_function("check_no_quota_1000", |b| {
         b.iter(|| {
             for _ in 0..1000 {
-                let result =
-                    black_box(enforcer.check(&org_id, &agent_id, "nonexistent", 1));
+                let result = black_box(enforcer.check(&org_id, &agent_id, "nonexistent", 1));
                 black_box(result);
             }
         });
@@ -106,8 +110,7 @@ fn bench_enforcer_check(c: &mut Criterion) {
     group.bench_function("check_registered_quota_1000", |b| {
         b.iter(|| {
             for _ in 0..1000 {
-                let result =
-                    black_box(enforcer.check(&org_id, &agent_id, "api_calls", 1));
+                let result = black_box(enforcer.check(&org_id, &agent_id, "api_calls", 1));
                 black_box(result);
             }
         });

@@ -9,6 +9,7 @@
 //! - `creto-messaging`: Secure agent-to-agent communication
 
 pub mod error;
+pub mod health;
 pub mod identity;
 pub mod types;
 
@@ -16,12 +17,12 @@ pub mod types;
 pub mod config;
 
 pub use error::{CretoError, CretoResult};
+pub use health::{health_check, HealthResponse};
 pub use identity::{AgentId, OrganizationId, UserId};
 pub use types::{Money, Timestamp};
 
 #[cfg(feature = "config")]
 pub use config::{
-    DatabaseConfig, RedisConfig, ObservabilityConfig,
-    MeteringConfig, OversightConfig, RuntimeConfig, MessagingConfig,
-    EnablementConfig, load_config, load_enablement_config,
+    load_config, load_enablement_config, DatabaseConfig, EnablementConfig, MessagingConfig,
+    MeteringConfig, ObservabilityConfig, OversightConfig, RedisConfig, RuntimeConfig,
 };

@@ -14,10 +14,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Example 1: Configure a service with amount threshold trigger
     println!("1. Creating service with $10,000 threshold trigger...");
-    let trigger_config = PolicyTriggerConfig::new()
-        .with_condition(TriggerCondition::AmountThreshold {
+    let trigger_config =
+        PolicyTriggerConfig::new().with_condition(TriggerCondition::AmountThreshold {
             threshold_cents: 1_000_000, // $10,000
-            currency: None,              // Apply to all currencies
+            currency: None,             // Apply to all currencies
         });
 
     let service = OversightService::new().with_triggers(trigger_config);
